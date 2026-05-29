@@ -29,11 +29,12 @@ HEADERS = {'User-Agent': 'consumer-health-dashboard/1.0'}
 
 def fetch_series(sid):
     params = {
-        'series_id':  sid,
-        'api_key':    API_KEY,
-        'file_type':  'json',
-        'limit':      1000,
-        'sort_order': 'asc',
+        'series_id':         sid,
+        'api_key':           API_KEY,
+        'file_type':         'json',
+        'limit':             2000,           # weekly series can have 1800+ points
+        'sort_order':        'asc',
+        'observation_start': '1990-01-01',   # 35+ yrs of history is plenty
     }
     r = requests.get(FRED_URL, params=params, headers=HEADERS, timeout=30)
     r.raise_for_status()
