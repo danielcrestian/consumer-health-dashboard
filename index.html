@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Consumer Health">
+  <title>Consumer Health Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    :root {
+      --teal:   #0891b2;
+      --green:  #16a34a;
+      --red:    #dc2626;
+      --amber:  #d97706;
+      --purple: #7c3aed;
+      --gray-50:  #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-400: #9ca3af;
+      --gray-600: #4b5563;
+      --gray-800: #1f2937;
+      --nav-h: 60px;
+      --header-h: 52px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-800);
+      -webkit-text-size-adjust: 100%;
+    }
+
+    /* ── MODAL ── */
+    .modal-backdrop {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.5);
+      align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px 24px;
+      width: 100%; max-width: 400px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    }
+    .modal-box h2 { font-size: 1.2rem; margin-bottom: 8px; }
+    .modal-box p  { font-size: .9rem; color: var(--gray-600); margin-bottom: 16px; line-height: 1.5; }
+    .modal-box a  { color: var(--teal); }
+    .modal-input {
+      width: 100%; padding: 12px 14px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 10px; font-size: 1rem;
+      outline: none; margin-bottom: 12px;
+    }
+    .modal-input:focus { border-color: var(--teal); }
+    .btn-primary {
+      width: 100%; padding: 13px;
+      background: var(--teal); color: #fff;
+      border: none; border-radius: 10px;
+      font-size: 1rem; font-weight: 600;
+      cursor: pointer; touch-action: manipulation;
+    }
+    .btn-primary:active { opacity: .85; }
+    .modal-note { font-size: .78rem; color: var(--gray-400); margin-top: 10px; text-align: center; }
+
+    /* ── HEADER ── */
+    header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      height: var(--header-h);
+      padding: env(safe-area-inset-top, 0) 16px 0;
+      background: #fff;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex; align-items: flex-end; justify-content: space-between;
+      padding-bottom: 10px;
+    }
+    .header-title { font-size: 1rem; font-weight: 700; color: var(--gray-800); }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .header-updated { font-size: .72rem; color: var(--gray-400); }
+    .btn-refresh {
+      background: none; border: 1.5px solid var(--gray-200);
+      border-radius: 8px; padding: 5px 10px;
+      font-size: .85rem; cursor: pointer; color: var(--gray-600);
+      touch-action: manipulation;
+    }
+    .btn-refresh:active { background: var(--gray-100); }
+    .btn-settings {
+      background: none; border: none;
+      font-size: 1.1rem; cursor: pointer;
+      touch-action: manipulation; padding: 4px;
+    }
+
+    /* ── BOTTOM NAV ── */
+    nav.bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+      height: calc(var(--nav-h) + env(safe-area-inset-bottom, 0));
+      padding-bottom: env(safe-area-inset-bottom, 0);
+      background: #fff;
+      border-top: 1px solid var(--gray-200);
+      display: flex;
+    }
+    .nav-btn {
+      flex: 1; background: none; border: none;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 3px; cursor: pointer;
+      font-size: .7rem; color: var(--gray-400);
+      touch-action: manipulation;
+    }
+    .nav-btn .nav-icon { font-size: 1.3rem; }
+    .nav-btn.active { color: var(--teal); }
+
+    /* ── MAIN SCROLL AREA ── */
+    main.tab-content {
+      display: none;
+      padding-top: calc(var(--header-h) + 8px);
+      padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0) + 8px);
+      min-height: 100dvh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    main.tab-content.active { display: block; }
+
+    /* ── SECTION HEADERS ── */
+    .section-header {
+      padding: 16px 16px 8px;
+      font-size: .72rem; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase;
+      color: var(--gray-400);
+    }
+
+    /* ── DELINQUENCY CHART ── */
+    .chart-card {
+      margin: 8px 16px;
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid var(--gray-200);
+      padding: 14px 12px 12px;
+    }
+    .chart-card-title {
+      font-size: .8rem; font-weight: 600;
+      color: var(--gray-600); margin-bottom: 12px;
+    }
+    .chart-wrap { position: relative; height: 220px; }
+    .chart-placeholder {
+      height: 220px; display: flex; align-items: center;
+      justify-content: center; text-align: center;
+      color: var(--gray-400); font-size: .85rem; line-height: 1.6;
+      border: 1.5px dashed var(--gray-200); border-radius: 10px;
+    }
+
+    /* ── METRIC CARDS GRID ── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 0 16px 4px;
+    }
+    .metric-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 14px;
+      padding: 12px 12px 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: box-shadow .15s;
+    }
+    .metric-card:active { box-shadow: 0 0 0 2px var(--teal); }
+    .card-name { font-size: .68rem; font-weight: 600; color: var(--gray-400); letter-spacing: .03em; margin-bottom: 4px; line-height: 1.3; }
+    .card-value { font-size: 1.4rem; font-weight: 700; color: var(--gray-800); line-height: 1.1; }
+    .card-period { font-size: .68rem; color: var(--gray-400); margin-top: 2px; }
+    .card-changes { font-size: .7rem; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .card-changes .chg { display: flex; align-items: center; gap: 2px; }
+    .chg-label { color: var(--gray-400); font-size: .65rem; }
+    .spark-wrap { margin-top: 8px; height: 40px; position: relative; }
+    .card-loading { font-size: .78rem; color: var(--gray-400); padding: 20px 0; text-align: center; }
+
+    /* ── ANALYSIS TAB ── */
+    .analysis-top { padding: 12px 16px 8px; }
+    .metric-select {
+      width: 100%; padding: 11px 14px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 10px; font-size: .95rem;
+      background: #fff; color: var(--gray-800);
+      outline: none; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239ca3af' fill='none' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+    }
+    .metric-select:focus { border-color: var(--teal); }
+
+    .analysis-chart-card {
+      margin: 8px 16px;
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid var(--gray-200);
+      padding: 14px 12px 12px;
+    }
+    .overlay-toggles { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .toggle-btn {
+      padding: 4px 10px; border-radius: 20px;
+      font-size: .72rem; font-weight: 600; border: none;
+      cursor: pointer; touch-action: manipulation;
+      transition: opacity .15s;
+    }
+    .toggle-btn.off { opacity: .4; }
+    .analysis-chart-wrap { position: relative; height: 240px; }
+
+    /* ── STATS SECTIONS ── */
+    .stats-card {
+      margin: 8px 16px;
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid var(--gray-200);
+      padding: 14px 12px;
+    }
+    .stats-card h3 {
+      font-size: .72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .07em;
+      color: var(--gray-400); margin-bottom: 12px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 12px;
+    }
+    .stat-item {}
+    .stat-label { font-size: .67rem; color: var(--gray-400); margin-bottom: 3px; line-height: 1.3; }
+    .stat-value { font-size: 1.05rem; font-weight: 700; color: var(--gray-800); }
+    .stat-sub   { font-size: .67rem; color: var(--gray-400); margin-top: 2px; }
+
+    /* colour helpers */
+    .green  { color: var(--green) !important; }
+    .red    { color: var(--red)   !important; }
+    .amber  { color: var(--amber) !important; }
+    .gray   { color: var(--gray-400) !important; }
+
+    /* spinner */
+    .spinner {
+      display: inline-block; width: 16px; height: 16px;
+      border: 2px solid var(--gray-200);
+      border-top-color: var(--teal);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* error banner */
+    .error-banner {
+      margin: 8px 16px; padding: 10px 14px;
+      background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: 10px; font-size: .8rem; color: var(--red);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════ API KEY MODAL ═══════════════════ -->
+<div class="modal-backdrop" id="apiModal">
+  <div class="modal-box">
+    <h2>FRED API Key Required</h2>
+    <p>This dashboard pulls live data from the Federal Reserve (FRED). A free API key takes 2 minutes to get.</p>
+    <input class="modal-input" id="apiKeyInput" type="text" placeholder="Paste your FRED API key here" autocomplete="off" autocorrect="off" autocapitalize="none">
+    <button class="btn-primary" onclick="saveKey()">Save &amp; Load Dashboard</button>
+    <p class="modal-note">
+      Get a free key at <a href="https://fred.stlouisfed.org/docs/api/api_key.html" target="_blank">fred.stlouisfed.org</a>
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header>
+  <span class="header-title">Consumer Health</span>
+  <div class="header-right">
+    <span class="header-updated" id="lastUpdated">–</span>
+    <button class="btn-refresh" id="refreshBtn" onclick="refreshAll()" title="Refresh data">↻ Refresh</button>
+    <button class="btn-settings" onclick="openSettings()" title="Settings">⚙️</button>
+  </div>
+</header>
+
+<!-- ═══════════════════ DASHBOARD TAB ═══════════════════ -->
+<main class="tab-content active" id="tab-dashboard">
+
+  <div class="section-header">Delinquency — % of Balance 90+ Days Past Due</div>
+  <div class="chart-card">
+    <div class="chart-card-title">NY Fed Consumer Credit Panel / Equifax</div>
+    <div class="chart-wrap" id="delinqWrap">
+      <div class="chart-placeholder" id="delinqPlaceholder">
+        <span><span class="spinner"></span>Awaiting data from GitHub Action…<br><br>
+        Run the workflow once to populate<br><code>data/delinquency.json</code></span>
+      </div>
+      <canvas id="delinqChart" style="display:none"></canvas>
+    </div>
+  </div>
+
+  <div class="section-header">Financial Stress</div>
+  <div class="cards-grid" id="grid-stress"></div>
+
+  <div class="section-header">Labor &amp; Wages</div>
+  <div class="cards-grid" id="grid-labor"></div>
+
+  <div class="section-header">Sentiment &amp; Spending</div>
+  <div class="cards-grid" id="grid-sentiment"></div>
+
+  <div class="section-header">Travel Demand</div>
+  <div class="cards-grid" id="grid-travel"></div>
+
+  <div style="height:8px"></div>
+</main>
+
+<!-- ═══════════════════ ANALYSIS TAB ═══════════════════ -->
+<main class="tab-content" id="tab-analysis">
+  <div class="analysis-top">
+    <select class="metric-select" id="metricSelect" onchange="runAnalysis()"></select>
+  </div>
+
+  <div id="analysisBody"></div>
+</main>
+
+<!-- ═══════════════════ BOTTOM NAV ═══════════════════ -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-tab="dashboard" onclick="switchTab('dashboard',this)">
+    <span class="nav-icon">📊</span>
+    <span>Dashboard</span>
+  </button>
+  <button class="nav-btn" data-tab="analysis" onclick="switchTab('analysis',this)">
+    <span class="nav-icon">🔍</span>
+    <span>Analysis</span>
+  </button>
+</nav>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════════
+
+const FRED_ROOT = 'https://api.stlouisfed.org/fred/series/observations';
+
+const METRICS = [
+  // ── Delinquency (local JSON from GitHub Action) ──────────
+  { id:'delinq_mortgage', name:'Mortgage 90+',          src:'local_delinq', key:'mortgage',     freq:'quarterly', unit:'%',  goodDir:'down', color:'#9ca3af', section:null },
+  { id:'delinq_auto',     name:'Auto Loan 90+',         src:'local_delinq', key:'auto',         freq:'quarterly', unit:'%',  goodDir:'down', color:'#6b7280', section:null },
+  { id:'delinq_card',     name:'Credit Card 90+',       src:'local_delinq', key:'credit_card',  freq:'quarterly', unit:'%',  goodDir:'down', color:'#0891b2', section:null },
+  { id:'delinq_student',  name:'Student Loan 90+',      src:'local_delinq', key:'student_loan', freq:'quarterly', unit:'%',  goodDir:'down', color:'#374151', section:null },
+  // ── Financial Stress ─────────────────────────────────────
+  { id:'cc_util',  name:'Credit Card Utilization', sid:'RCCCBACTIVEUTILPCT50', src:'fred', freq:'monthly',   unit:'%',  goodDir:'down', color:'#0891b2', section:'stress' },
+  { id:'savings',  name:'Personal Saving Rate',    sid:'PSAVERT',              src:'fred', freq:'monthly',   unit:'%',  goodDir:'up',   color:'#16a34a', section:'stress' },
+  { id:'dsr',      name:'Debt Service Ratio',      sid:'TDSP',                 src:'fred', freq:'quarterly', unit:'%',  goodDir:'down', color:'#dc2626', section:'stress' },
+  { id:'rdpi',     name:'Real Disposable Income',  sid:'DSPIC96',              src:'fred', freq:'monthly',   unit:'B$', goodDir:'up',   color:'#7c3aed', section:'stress' },
+  // ── Labor & Wages ─────────────────────────────────────────
+  { id:'wages',    name:'Real Median Weekly Wages', sid:'LES1252881600Q',      src:'fred', freq:'quarterly', unit:'$',  goodDir:'up',   color:'#d97706', section:'labor'  },
+  { id:'claims',   name:'Initial Claims (4-wk avg)',sid:'IC4WSA',              src:'fred', freq:'weekly',    unit:'K',  goodDir:'down', color:'#dc2626', section:'labor'  },
+  // ── Sentiment & Spending ──────────────────────────────────
+  { id:'sentiment',name:'Consumer Sentiment',       sid:'UMCSENT',             src:'fred', freq:'monthly',   unit:'',   goodDir:'up',   color:'#0891b2', section:'sentiment' },
+  { id:'retail',   name:'Retail ex-Auto & Gas',     sid:'MRTSSM44W72USS',      src:'fred', freq:'monthly',   unit:'$M', goodDir:'up',   color:'#16a34a', section:'sentiment' },
+  // ── Travel Demand ─────────────────────────────────────────
+  { id:'lh_emp',   name:'Leisure & Hosp. Employ.',  sid:'USLAH',               src:'fred', freq:'monthly',   unit:'K',  goodDir:'up',   color:'#7c3aed', section:'travel'  },
+  { id:'tsa',      name:'TSA Throughput (YoY %)',   src:'local_tsa',                        freq:'daily',     unit:'%',  goodDir:'up',   color:'#d97706', section:'travel'  },
+];
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+
+let apiKey  = localStorage.getItem('fredApiKey') || '';
+let cache   = {};          // metricId → [{date, value}]
+let charts  = {};          // chart instances keyed by canvas id
+let sparkRegistry = [];    // chart instances to destroy on refresh
+
+// ═══════════════════════════════════════════════════════════
+//  API KEY
+// ═══════════════════════════════════════════════════════════
+
+function saveKey() {
+  const v = document.getElementById('apiKeyInput').value.trim();
+  if (!v) { alert('Please enter your FRED API key.'); return; }
+  apiKey = v;
+  localStorage.setItem('fredApiKey', v);
+  document.getElementById('apiModal').classList.remove('open');
+  bootstrap();
+}
+
+function openSettings() {
+  document.getElementById('apiKeyInput').value = apiKey;
+  document.getElementById('apiModal').classList.add('open');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DATA FETCHING
+// ═══════════════════════════════════════════════════════════
+
+async function fredFetch(sid) {
+  if (cache[sid]) return cache[sid];
+  const url = `${FRED_ROOT}?series_id=${sid}&api_key=${apiKey}&file_type=json&limit=400&sort_order=asc`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`FRED ${sid}: HTTP ${r.status}`);
+  const j = await r.json();
+  if (j.error_message) throw new Error(`FRED ${sid}: ${j.error_message}`);
+  const pts = j.observations
+    .filter(o => o.value !== '.')
+    .map(o => ({ date: new Date(o.date), value: parseFloat(o.value) }));
+  cache[sid] = pts;
+  return pts;
+}
+
+async function localFetch(file) {
+  try {
+    const r = await fetch(`data/${file}.json?t=${Date.now()}`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+async function loadAllData() {
+  const errors = [];
+
+  // FRED metrics (parallel)
+  const fredMetrics = METRICS.filter(m => m.src === 'fred');
+  await Promise.allSettled(fredMetrics.map(async m => {
+    try {
+      cache[m.id] = await fredFetch(m.sid);
+    } catch(e) {
+      errors.push(e.message);
+      cache[m.id] = null;
+    }
+  }));
+
+  // Local: delinquency
+  const delinqJson = await localFetch('delinquency');
+  if (delinqJson) {
+    ['mortgage','auto','credit_card','student_loan'].forEach(key => {
+      const idMap = { mortgage:'delinq_mortgage', auto:'delinq_auto', credit_card:'delinq_card', student_loan:'delinq_student' };
+      const arr = delinqJson[key];
+      if (Array.isArray(arr)) {
+        cache[idMap[key]] = arr.map(r => ({ date: new Date(r.date), value: r.value }));
+      }
+    });
+  }
+
+  // Local: TSA — convert raw counts to YoY %
+  const tsaJson = await localFetch('tsa');
+  if (tsaJson && Array.isArray(tsaJson.data)) {
+    const sorted = [...tsaJson.data].sort((a,b) => a.date < b.date ? -1 : 1);
+    const dateMap = {};
+    sorted.forEach(r => { dateMap[r.date] = r.value; });
+    const yoyPts = [];
+    sorted.forEach(r => {
+      const d = new Date(r.date);
+      d.setFullYear(d.getFullYear() - 1);
+      const lyKey = d.toISOString().slice(0,10);
+      if (dateMap[lyKey]) {
+        yoyPts.push({
+          date: new Date(r.date),
+          value: ((r.value - dateMap[lyKey]) / dateMap[lyKey]) * 100
+        });
+      }
+    });
+    cache['tsa'] = yoyPts;
+  }
+
+  return errors;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STATISTICS ENGINE
+// ═══════════════════════════════════════════════════════════
+
+function avg(arr) { return arr.reduce((s,v)=>s+v,0)/arr.length; }
+
+function computeStats(pts, m) {
+  if (!pts || pts.length === 0) return null;
+  const vals  = pts.map(p => p.value);
+  const dates = pts.map(p => p.date);
+  const n     = vals.length;
+  const cur   = vals[n-1];
+  const curDt = dates[n-1];
+
+  // prior period change label
+  const priorLbl = m.freq === 'quarterly' ? 'QoQ'
+                 : m.freq === 'monthly'   ? 'MoM'
+                 : m.freq === 'weekly'    ? 'WoW' : 'DoD';
+
+  const priorChg = n >= 2 ? cur - vals[n-2] : null;
+
+  // YoY change (approximate by periods back)
+  const pyBack = m.freq === 'monthly' ? 12 : m.freq === 'quarterly' ? 4
+               : m.freq === 'weekly'  ? 52 : 365;
+  const yoyChg = n > pyBack ? cur - vals[n-1-pyBack] : null;
+
+  // Rolling averages
+  const roll = k => n >= k ? avg(vals.slice(n-k)) : null;
+  const r3   = roll(3);
+  const r6   = roll(6);
+  const r12  = roll(12);
+
+  // QTD
+  const cy = curDt.getFullYear();
+  const cq = Math.floor(curDt.getMonth()/3);
+  const qtdPts  = pts.filter(p => p.date.getFullYear()===cy && Math.floor(p.date.getMonth()/3)===cq);
+  const qtdPtsLY= pts.filter(p => p.date.getFullYear()===cy-1 && Math.floor(p.date.getMonth()/3)===cq);
+  const qtdAvg  = qtdPts.length  ? avg(qtdPts.map(p=>p.value))   : null;
+  const qtdLY   = qtdPtsLY.length? avg(qtdPtsLY.map(p=>p.value)) : null;
+
+  // YTD
+  const ytdPts  = pts.filter(p => p.date.getFullYear()===cy);
+  const ytdPtsLY= pts.filter(p => p.date.getFullYear()===cy-1 && p.date.getMonth()<=curDt.getMonth());
+  const ytdAvg  = ytdPts.length  ? avg(ytdPts.map(p=>p.value))   : null;
+  const ytdLY   = ytdPtsLY.length? avg(ytdPtsLY.map(p=>p.value)) : null;
+
+  // Historical extremes
+  const maxV = Math.max(...vals); const maxDt = dates[vals.indexOf(maxV)];
+  const minV = Math.min(...vals); const minDt = dates[vals.indexOf(minV)];
+
+  // Percentile
+  const sorted = [...vals].sort((a,b)=>a-b);
+  const rank = sorted.filter(v=>v<=cur).length;
+  const pctile = Math.round(rank/n*100);
+
+  // Era averages
+  const preC  = pts.filter(p=>p.date.getFullYear()>=2015&&p.date.getFullYear()<=2019);
+  const postC = pts.filter(p=>p.date.getFullYear()>=2021);
+  const preCA = preC.length  ? avg(preC.map(p=>p.value))  : null;
+  const postCA= postC.length ? avg(postC.map(p=>p.value)) : null;
+
+  // Std dev
+  const mean = avg(vals);
+  const std  = Math.sqrt(vals.reduce((s,v)=>s+(v-mean)**2,0)/n);
+
+  // Period label
+  const periodLbl = m.freq === 'quarterly'
+    ? `Q${Math.floor(curDt.getMonth()/3)+1} ${curDt.getFullYear()}`
+    : m.freq === 'monthly'
+    ? curDt.toLocaleDateString('en-US',{month:'short',year:'numeric'})
+    : curDt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+
+  return { cur, curDt, periodLbl, priorLbl, priorChg, yoyChg,
+           r3, r6, r12, qtdAvg, qtdLY, ytdAvg, ytdLY,
+           maxV, maxDt, minV, minDt, pctile, preCA, postCA, mean, std };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FORMAT HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function fmtVal(v, unit, dp=1) {
+  if (v == null || isNaN(v)) return '–';
+  const f = v.toFixed(dp);
+  if (unit==='%')  return `${f}%`;
+  if (unit==='B$') return `$${(v/1000).toFixed(1)}T`;
+  if (unit==='K')  return `${(+v).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,',')}`;
+  if (unit==='$M') return `$${(v/1000).toFixed(1)}B`;
+  if (unit==='$')  return `$${f}`;
+  return f;
+}
+
+function fmtChg(delta, unit, goodDir, showLabel='') {
+  if (delta == null || isNaN(delta)) return `<span class="gray">–</span>`;
+  const abs  = Math.abs(delta);
+  const sign = delta > 0 ? '+' : '';
+  const arrow= delta > 0 ? '▲' : delta < 0 ? '▼' : '→';
+  const suffix = unit==='%' ? 'pp' : unit==='' ? '' : '';
+  const isGood = (goodDir==='up'&&delta>0)||(goodDir==='down'&&delta<0)||(delta===0);
+  const cls  = delta===0 ? 'gray' : isGood ? 'green' : 'red';
+  const label= showLabel ? `<span class="chg-label"> ${showLabel}</span>` : '';
+  return `<span class="${cls}">${arrow} ${sign}${abs.toFixed(2)}${suffix}${label}</span>`;
+}
+
+function fmtDate(dt, mode='short') {
+  if (!dt) return '–';
+  if (mode==='short') return dt.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+function ordinal(n) {
+  const s=['th','st','nd','rd'];
+  const v=n%100;
+  return n+(s[(v-20)%10]||s[v]||s[0]);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DASHBOARD: DELINQUENCY CHART
+// ═══════════════════════════════════════════════════════════
+
+function renderDelinquencyChart() {
+  const ids    = ['delinq_mortgage','delinq_auto','delinq_card','delinq_student'];
+  const labels = ['Mortgage','Auto Loan','Credit Card','Student Loan'];
+  const colors = ['#9ca3af','#6b7280','#0891b2','#374151'];
+
+  const datasets = ids.map((id,i) => {
+    const pts = cache[id];
+    if (!pts) return null;
+    return {
+      label: labels[i],
+      data: pts.map(p=>({x:p.date,y:p.value})),
+      borderColor: colors[i],
+      backgroundColor: 'transparent',
+      borderWidth: id==='delinq_card' ? 2.5 : 1.8,
+      pointRadius: 0,
+      tension: 0.3,
+    };
+  }).filter(Boolean);
+
+  if (datasets.length === 0) return;
+
+  document.getElementById('delinqPlaceholder').style.display = 'none';
+  const canvas = document.getElementById('delinqChart');
+  canvas.style.display = 'block';
+
+  if (charts.delinq) charts.delinq.destroy();
+  charts.delinq = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { position:'bottom', labels:{ boxWidth:10, font:{size:10} } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(2)}%` } }
+      },
+      scales: {
+        x: { type:'time', time:{unit:'year'}, grid:{display:false}, ticks:{font:{size:10}} },
+        y: { ticks:{ callback: v=>`${v}%`, font:{size:10} }, grid:{color:'#f3f4f6'} }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DASHBOARD: METRIC CARDS
+// ═══════════════════════════════════════════════════════════
+
+function renderCards() {
+  const sections = { stress:'grid-stress', labor:'grid-labor', sentiment:'grid-sentiment', travel:'grid-travel' };
+  Object.values(sections).forEach(id => { document.getElementById(id).innerHTML = ''; });
+
+  METRICS.filter(m => m.section).forEach(m => {
+    const pts   = cache[m.id];
+    const stats = pts ? computeStats(pts, m) : null;
+    const grid  = document.getElementById(sections[m.section]);
+    if (!grid) return;
+
+    const card = document.createElement('div');
+    card.className = 'metric-card';
+    card.onclick = () => goToAnalysis(m.id);
+
+    if (!stats) {
+      card.innerHTML = `
+        <div class="card-name">${m.name}</div>
+        <div class="card-loading"><span class="spinner"></span></div>`;
+    } else {
+      const sparkId = `spark-${m.id}`;
+      card.innerHTML = `
+        <div class="card-name">${m.name}</div>
+        <div class="card-value">${fmtVal(stats.cur, m.unit, 2)}</div>
+        <div class="card-period">${stats.periodLbl}</div>
+        <div class="card-changes">
+          <span class="chg">${fmtChg(stats.priorChg, m.unit, m.goodDir)} <span class="chg-label">${stats.priorLbl}</span></span>
+          <span class="chg">${fmtChg(stats.yoyChg, m.unit, m.goodDir)} <span class="chg-label">YoY</span></span>
+        </div>
+        <div class="spark-wrap"><canvas id="${sparkId}"></canvas></div>`;
+    }
+
+    grid.appendChild(card);
+
+    if (stats && pts) {
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`spark-${m.id}`);
+        if (!el) return;
+        const recent = pts.slice(-60);
+        const inst = new Chart(el.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: recent.map(p=>p.date),
+            datasets: [{ data: recent.map(p=>p.value), borderColor: m.color,
+              borderWidth:1.5, pointRadius:0, fill:true,
+              backgroundColor: m.color+'18' }]
+          },
+          options: {
+            responsive:true, maintainAspectRatio:false, animation:false,
+            plugins:{ legend:{display:false}, tooltip:{enabled:false} },
+            scales:{ x:{display:false}, y:{display:false} }
+          }
+        });
+        sparkRegistry.push(inst);
+      });
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ANALYSIS TAB
+// ═══════════════════════════════════════════════════════════
+
+function populateSelect() {
+  const sel = document.getElementById('metricSelect');
+  sel.innerHTML = '';
+  const groups = [
+    { label:'Delinquency (90+ Days)', ids:['delinq_mortgage','delinq_auto','delinq_card','delinq_student'] },
+    { label:'Financial Stress',       ids:['cc_util','savings','dsr','rdpi'] },
+    { label:'Labor & Wages',          ids:['wages','claims'] },
+    { label:'Sentiment & Spending',   ids:['sentiment','retail'] },
+    { label:'Travel Demand',          ids:['lh_emp','tsa'] },
+  ];
+  groups.forEach(g => {
+    const og = document.createElement('optgroup');
+    og.label = g.label;
+    g.ids.forEach(id => {
+      const m   = METRICS.find(x=>x.id===id);
+      const opt = document.createElement('option');
+      opt.value = id; opt.textContent = m.name;
+      og.appendChild(opt);
+    });
+    sel.appendChild(og);
+  });
+}
+
+function runAnalysis() {
+  const id = document.getElementById('metricSelect').value;
+  const m  = METRICS.find(x=>x.id===id);
+  const pts = cache[id];
+  const body = document.getElementById('analysisBody');
+
+  if (!m || !pts || pts.length === 0) {
+    body.innerHTML = `<div class="stats-card" style="margin-top:8px">
+      <p style="color:var(--gray-400);font-size:.85rem">
+        ${!pts ? 'Data not yet loaded — check your FRED API key or wait for the GitHub Action to run.' : 'No data available.'}
+      </p></div>`;
+    return;
+  }
+
+  const s = computeStats(pts, m);
+
+  // Rolling average datasets
+  const roll = (k) => pts.map((p,i,a) => {
+    if (i < k-1) return { x:p.date, y:null };
+    return { x:p.date, y: avg(a.slice(i-k+1,i+1).map(r=>r.value)) };
+  });
+
+  body.innerHTML = `
+    <!-- Analysis chart -->
+    <div class="analysis-chart-card">
+      <div class="overlay-toggles" id="overlayToggles">
+        <button class="toggle-btn" style="background:${m.color};color:#fff" data-ds="0" onclick="toggleOverlay(this)">Series</button>
+        <button class="toggle-btn off" style="background:#f59e0b;color:#fff" data-ds="1" onclick="toggleOverlay(this)">3-Period</button>
+        <button class="toggle-btn off" style="background:#ef4444;color:#fff" data-ds="2" onclick="toggleOverlay(this)">12-Period</button>
+      </div>
+      <div class="analysis-chart-wrap"><canvas id="aChart"></canvas></div>
+    </div>
+
+    <!-- Snapshot -->
+    <div class="stats-card">
+      <h3>Current Snapshot</h3>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">Value</div>
+          <div class="stat-value">${fmtVal(s.cur,m.unit,2)}</div>
+          <div class="stat-sub">${s.periodLbl}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">${s.priorLbl} Change</div>
+          <div class="stat-value">${fmtChg(s.priorChg,m.unit,m.goodDir)}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">YoY Change</div>
+          <div class="stat-value">${fmtChg(s.yoyChg,m.unit,m.goodDir)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rolling averages -->
+    <div class="stats-card">
+      <h3>Rolling Averages</h3>
+      <div class="stats-grid">
+        ${s.r3  != null ? `<div class="stat-item"><div class="stat-label">3-Period</div><div class="stat-value">${fmtVal(s.r3,m.unit,2)}</div></div>` : ''}
+        ${s.r6  != null ? `<div class="stat-item"><div class="stat-label">6-Period</div><div class="stat-value">${fmtVal(s.r6,m.unit,2)}</div></div>` : ''}
+        ${s.r12 != null ? `<div class="stat-item"><div class="stat-label">12-Period</div><div class="stat-value">${fmtVal(s.r12,m.unit,2)}</div></div>` : ''}
+      </div>
+    </div>
+
+    <!-- Period-to-date -->
+    <div class="stats-card">
+      <h3>Period-to-Date</h3>
+      <div class="stats-grid">
+        ${s.qtdAvg != null ? `
+          <div class="stat-item">
+            <div class="stat-label">QTD Avg</div>
+            <div class="stat-value">${fmtVal(s.qtdAvg,m.unit,2)}</div>
+            <div class="stat-sub">${s.qtdLY != null ? 'vs ' + fmtVal(s.qtdLY,m.unit,2) + ' LY' : ''}</div>
+          </div>
+          ${s.qtdLY != null ? `<div class="stat-item">
+            <div class="stat-label">QTD vs LY</div>
+            <div class="stat-value">${fmtChg(s.qtdAvg-s.qtdLY,m.unit,m.goodDir)}</div>
+          </div>` : ''}` : ''}
+        ${s.ytdAvg != null ? `
+          <div class="stat-item">
+            <div class="stat-label">YTD Avg</div>
+            <div class="stat-value">${fmtVal(s.ytdAvg,m.unit,2)}</div>
+            <div class="stat-sub">${s.ytdLY != null ? 'vs ' + fmtVal(s.ytdLY,m.unit,2) + ' LY' : ''}</div>
+          </div>
+          ${s.ytdLY != null ? `<div class="stat-item">
+            <div class="stat-label">YTD vs LY</div>
+            <div class="stat-value">${fmtChg(s.ytdAvg-s.ytdLY,m.unit,m.goodDir)}</div>
+          </div>` : ''}` : ''}
+      </div>
+    </div>
+
+    <!-- Historical context -->
+    <div class="stats-card">
+      <h3>Historical Context</h3>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">All-Time High</div>
+          <div class="stat-value red">${fmtVal(s.maxV,m.unit,2)}</div>
+          <div class="stat-sub">${fmtDate(s.maxDt)}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">All-Time Low</div>
+          <div class="stat-value green">${fmtVal(s.minV,m.unit,2)}</div>
+          <div class="stat-sub">${fmtDate(s.minDt)}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Hist. Percentile</div>
+          <div class="stat-value">${ordinal(s.pctile)}</div>
+          <div class="stat-sub">in full history</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Std Deviation</div>
+          <div class="stat-value">±${fmtVal(s.std,m.unit,2)}</div>
+        </div>
+        ${s.preCA  != null ? `<div class="stat-item"><div class="stat-label">Pre-COVID Avg</div><div class="stat-value">${fmtVal(s.preCA,m.unit,2)}</div><div class="stat-sub">2015–2019</div></div>` : ''}
+        ${s.postCA != null ? `<div class="stat-item"><div class="stat-label">Post-COVID Avg</div><div class="stat-value">${fmtVal(s.postCA,m.unit,2)}</div><div class="stat-sub">2021–present</div></div>` : ''}
+      </div>
+    </div>
+    <div style="height:8px"></div>
+  `;
+
+  // Render analysis chart
+  if (charts.analysis) { charts.analysis.destroy(); delete charts.analysis; }
+  const aCtx = document.getElementById('aChart').getContext('2d');
+  charts.analysis = new Chart(aCtx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: m.name,
+          data: pts.map(p=>({x:p.date,y:p.value})),
+          borderColor: m.color, backgroundColor: m.color+'18',
+          borderWidth:2, pointRadius:0, fill:true, tension:0.3,
+          hidden: false,
+        },
+        {
+          label: '3-Period Avg',
+          data: roll(3),
+          borderColor:'#f59e0b', borderWidth:1.5, borderDash:[5,3],
+          pointRadius:0, fill:false, hidden:true,
+        },
+        {
+          label: '12-Period Avg',
+          data: roll(12),
+          borderColor:'#ef4444', borderWidth:1.5, borderDash:[8,4],
+          pointRadius:0, fill:false, hidden:true,
+        },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins: {
+        legend: { display:false },
+        tooltip: { callbacks: { label: c => c.parsed.y!=null ? `${c.dataset.label}: ${fmtVal(c.parsed.y,m.unit,2)}` : '' } }
+      },
+      scales: {
+        x: { type:'time', time:{unit:'year'}, grid:{color:'#f3f4f6'}, ticks:{font:{size:10}} },
+        y: { ticks:{ callback: v=>fmtVal(v,m.unit,1), font:{size:10} }, grid:{color:'#f3f4f6'} }
+      }
+    }
+  });
+}
+
+function toggleOverlay(btn) {
+  if (!charts.analysis) return;
+  const dsIdx = parseInt(btn.dataset.ds);
+  const meta  = charts.analysis.getDatasetMeta(dsIdx);
+  meta.hidden = !meta.hidden;
+  btn.classList.toggle('off', meta.hidden);
+  charts.analysis.update();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════════
+
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`tab-${id}`).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'analysis') runAnalysis();
+}
+
+function goToAnalysis(metricId) {
+  document.getElementById('metricSelect').value = metricId;
+  const btn = document.querySelector('[data-tab="analysis"]');
+  switchTab('analysis', btn);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  REFRESH & INIT
+// ═══════════════════════════════════════════════════════════
+
+async function refreshAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = '↻ Loading…';
+
+  // Destroy spark charts
+  sparkRegistry.forEach(c => c.destroy());
+  sparkRegistry = [];
+
+  // Clear FRED cache (keep local unless stale)
+  METRICS.filter(m=>m.src==='fred').forEach(m => { delete cache[m.sid]; delete cache[m.id]; });
+
+  await loadAndRender();
+
+  btn.disabled = false;
+  btn.textContent = '↻ Refresh';
+}
+
+async function loadAndRender() {
+  const errors = await loadAllData();
+  renderDelinquencyChart();
+  renderCards();
+  populateSelect();
+  if (document.getElementById('tab-analysis').classList.contains('active')) {
+    runAnalysis();
+  }
+  document.getElementById('lastUpdated').textContent =
+    new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+
+  if (errors.length > 0) {
+    const existing = document.querySelector('.error-banner');
+    if (existing) existing.remove();
+    const banner = document.createElement('div');
+    banner.className = 'error-banner';
+    banner.textContent = `⚠ Some series failed to load: ${errors.slice(0,2).join('; ')}`;
+    document.getElementById('tab-dashboard').insertAdjacentElement('afterbegin', banner);
+  }
+}
+
+async function bootstrap() {
+  if (!apiKey) {
+    document.getElementById('apiModal').classList.add('open');
+    return;
+  }
+  await loadAndRender();
+  // Auto-refresh every 6 hours
+  setInterval(loadAndRender, 6 * 60 * 60 * 1000);
+}
+
+// ── Start ──
+bootstrap();
+</script>
+</body>
+</html>

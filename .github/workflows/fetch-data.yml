@@ -1,0 +1,41 @@
+name: Fetch External Data
+
+on:
+  schedule:
+    # 8 am ET daily (13:00 UTC covers EST and EDT)
+    - cron: '0 13 * * *'
+  workflow_dispatch:   # allow manual trigger from GitHub Actions UI
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to commit data files back to the repo
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 openpyxl
+
+      - name: Fetch TSA checkpoint data
+        run: python .github/scripts/fetch_tsa.py
+
+      - name: Fetch NY Fed delinquency data
+        run: python .github/scripts/fetch_nyfed.py
+
+      - name: Commit and push updated data files
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/tsa.json data/delinquency.json
+          # Only commit if there are actual changes
+          git diff --staged --quiet || git commit -m "data: auto-update $(date -u +'%Y-%m-%d')"
+          git push
