@@ -2,9 +2,6 @@
 Downloads the latest NY Fed Household Debt & Credit quarterly Excel file
 and extracts "Percent of Balance 90+ Days Delinquent" by loan type.
 Saves to data/delinquency.json.
-
-NY Fed Excel URL pattern:
-  https://www.newyorkfed.org/medialibrary/interactives/householdcredit/data/xls/hhd_c_report_YYYYqN.xlsx
 """
 import io, json, os, re
 from datetime import datetime, timezone
@@ -15,11 +12,15 @@ import requests
 DATA_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'delinquency.json')
 BASE_URL  = 'https://www.newyorkfed.org/medialibrary/interactives/householdcredit/data/xls'
 
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*',
+}
 
-# ── helpers ──────────────────────────────────────────────────────────────────
 
-def quarter_sequence(start_year: int, start_q: int, steps: int = 6):
-    """Yield (year, quarter) going backwards from start."""
+# ── download ──────────────────────────────────────────────────────────────────
+
+def quarter_sequence(start_year, start_q, steps=8):
     y, q = start_year, start_q
     for _ in range(steps):
         yield y, q
@@ -28,143 +29,182 @@ def quarter_sequence(start_year: int, start_q: int, steps: int = 6):
             q, y = 4, y - 1
 
 
-def download_latest() -> tuple[bytes, str]:
+def download_latest():
     now = datetime.now(timezone.utc)
     for y, q in quarter_sequence(now.year, (now.month - 1) // 3 + 1):
         url = f'{BASE_URL}/hhd_c_report_{y}q{q}.xlsx'
         try:
-            r = requests.get(url, timeout=30)
+            r = requests.get(url, headers=HEADERS, timeout=30)
             if r.status_code != 200:
+                print(f'  HTTP {r.status_code} for {url}')
                 continue
-            # XLSX files are ZIP archives — verify magic bytes before parsing
-            if not r.content[:4] == b'PK\x03\x04':
-                print(f'Skipping {url} — not a valid XLSX (got HTML error page?)')
+            if r.content[:4] != b'PK\x03\x04':
+                print(f'  Skipping {url} — not a valid ZIP/XLSX')
                 continue
-            print(f'Downloaded: {url}')
+            print(f'Downloaded: {url} ({len(r.content):,} bytes)')
             return r.content, url
-        except requests.RequestException:
-            continue
-    raise RuntimeError('Could not find NY Fed Excel file for last 6 quarters')
+        except requests.RequestException as e:
+            print(f'  Request error for {url}: {e}')
+    raise RuntimeError('Could not find NY Fed Excel file for last 8 quarters')
 
 
-def find_delinquency_sheet(wb: openpyxl.Workbook) -> openpyxl.worksheet.worksheet.Worksheet:
-    """
-    Locate the sheet containing percent-of-balance 90+ day delinquency data.
-    The NY Fed typically labels this sheet something like 'Page 11 Data'.
-    We search by name first, then by cell content.
-    """
-    keywords = ['delinquent', '90', 'page 11', 'fig 11', 'figure 11']
+# ── sheet & data discovery ────────────────────────────────────────────────────
 
-    # 1. Search sheet names
+def log_workbook_structure(wb):
+    """Print full structure so we can diagnose parsing issues."""
+    print(f'\n=== Workbook has {len(wb.sheetnames)} sheets ===')
     for name in wb.sheetnames:
-        if any(kw in name.lower() for kw in keywords):
-            print(f'Sheet found by name: "{name}"')
-            return wb[name]
+        print(f'  Sheet: "{name}"')
 
-    # 2. Search first few rows of each sheet for header keywords
     for name in wb.sheetnames:
         ws = wb[name]
-        for row in ws.iter_rows(min_row=1, max_row=6, values_only=True):
-            for cell in row:
-                if cell and isinstance(cell, str):
-                    low = cell.lower()
-                    if '90' in low and 'delinquent' in low:
-                        print(f'Sheet found by content scan: "{name}"')
-                        return ws
+        print(f'\n--- First 8 rows of sheet "{name}" ---')
+        for i, row in enumerate(ws.iter_rows(values_only=True)):
+            if i >= 8:
+                break
+            cells = [str(c)[:25] if c is not None else '–' for c in row[:10]]
+            print(f'  Row {i:2d}: {cells}')
 
-    # 3. Fallback: sheet whose name contains '11'
+
+def find_delinquency_sheet(wb):
+    """
+    Score every sheet: the one with the most quarterly date entries
+    AND at least one column matching loan-type keywords wins.
+    """
+    LOAN_KEYS = ['mortgage', 'auto', 'credit', 'student']
+    DATE_RE   = re.compile(r'(19|20)\d{2}')   # bare year or part of date
+
+    best_name, best_score = None, -1
+
     for name in wb.sheetnames:
-        if '11' in name:
-            print(f'Sheet found by fallback (contains "11"): "{name}"')
-            return wb[name]
+        ws      = wb[name]
+        rows    = list(ws.iter_rows(min_row=1, max_row=60, values_only=True))
+        score   = 0
 
-    print(f'WARNING: could not identify sheet. Sheets available: {wb.sheetnames}')
-    # Last resort: penultimate sheet (often the right one in recent files)
-    return wb[wb.sheetnames[-2]] if len(wb.sheetnames) >= 2 else wb.active
+        # Does any header row mention loan types?
+        for row in rows[:10]:
+            text = ' '.join(str(c).lower() for c in row if c is not None)
+            for kw in LOAN_KEYS:
+                if kw in text:
+                    score += 10
+
+        # How many rows look like quarterly date rows?
+        for row in rows:
+            first = str(row[0]).strip() if row[0] is not None else ''
+            if DATE_RE.search(first):
+                score += 1
+
+        print(f'  Sheet "{name}" score: {score}')
+        if score > best_score:
+            best_score, best_name = score, name
+
+    print(f'\nSelected sheet: "{best_name}" (score {best_score})')
+    return wb[best_name]
 
 
-def parse_quarter_date(raw) -> str | None:
-    """Convert various NY Fed date formats to ISO YYYY-MM-DD (first day of quarter)."""
+# ── date parsing ──────────────────────────────────────────────────────────────
+
+def parse_date(raw):
+    """Convert any NY Fed date format to YYYY-MM-DD (first day of quarter)."""
     if isinstance(raw, datetime):
-        return raw.strftime('%Y-%m-%d')
+        # Excel serial date decoded as datetime — snap to nearest quarter
+        m = raw.month
+        q = (m - 1) // 3 + 1
+        return f'{raw.year}-{q * 3 - 2:02d}-01'
     if not isinstance(raw, str):
         return None
     raw = raw.strip()
-    # e.g. "2025:Q1" or "2025:q1"
-    m = re.match(r'(\d{4})[:\s-]?[Qq](\d)', raw)
+
+    # "2025:Q1" or "2025:q1"
+    m = re.match(r'(\d{4})[:\s\-]?[Qq](\d)', raw)
     if m:
         y, q = int(m.group(1)), int(m.group(2))
-        return f'{y}-{q*3-2:02d}-01'
-    # e.g. "Q1 2025"
-    m = re.match(r'[Qq](\d)\s+(\d{4})', raw)
+        return f'{y}-{q * 3 - 2:02d}-01'
+
+    # "Q1 2025" or "Q1:2025"
+    m = re.match(r'[Qq](\d)[:\s\-]+(\d{4})', raw)
     if m:
         q, y = int(m.group(1)), int(m.group(2))
-        return f'{y}-{q*3-2:02d}-01'
-    # e.g. bare year like "2003" — skip
+        return f'{y}-{q * 3 - 2:02d}-01'
+
+    # Bare year like "2003" — assume Q1
+    m = re.match(r'^(\d{4})$', raw)
+    if m:
+        return f'{m.group(1)}-01-01'
+
     return None
 
 
-def extract_data(ws) -> dict[str, list[dict]]:
-    """
-    Parse the worksheet and return a dict with keys:
-      mortgage, auto, credit_card, student_loan
-    each containing [{date, value}, ...] sorted by date.
-    """
-    col_map: dict[str, int] = {}   # key → 0-based column index
-    data: dict[str, list] = {
-        'mortgage': [], 'auto': [], 'credit_card': [], 'student_loan': []
-    }
+# ── column detection ──────────────────────────────────────────────────────────
 
-    PATTERNS = {
-        'mortgage':     ['mortgage'],
-        'auto':         ['auto'],
-        'credit_card':  ['credit card', 'creditcard', 'credit_card'],
-        'student_loan': ['student'],
-    }
+COLUMN_PATTERNS = {
+    'mortgage':     ['mortgage'],
+    'auto':         ['auto'],
+    'credit_card':  ['credit card', 'credit_card', 'creditcard', 'cc'],
+    'student_loan': ['student'],
+}
 
-    header_row_idx = None
 
-    for row_idx, row in enumerate(ws.iter_rows(values_only=True)):
+def detect_columns(header_row):
+    col_map = {}
+    for ci, cell in enumerate(header_row):
+        if cell is None:
+            continue
+        text = str(cell).lower().strip()
+        for key, patterns in COLUMN_PATTERNS.items():
+            if key not in col_map and any(p in text for p in patterns):
+                col_map[key] = ci
+                print(f'  Col {ci} → {key} ("{cell}")')
+    return col_map
+
+
+# ── main extraction ───────────────────────────────────────────────────────────
+
+def extract_data(ws):
+    data    = {k: [] for k in COLUMN_PATTERNS}
+    col_map = {}
+    header_found = False
+
+    all_rows = list(ws.iter_rows(values_only=True))
+    print(f'Total rows in sheet: {len(all_rows)}')
+
+    for row_i, row in enumerate(all_rows):
         if not any(c is not None for c in row):
             continue
 
-        # ── detect header row ─────────────────────────────────
-        if not col_map:
-            row_strs = [str(c).lower().strip() if c is not None else '' for c in row]
-            matched = False
-            for key, pats in PATTERNS.items():
-                for ci, cell_str in enumerate(row_strs):
-                    if any(p in cell_str for p in pats):
-                        col_map[key] = ci
-                        matched = True
-            if matched:
-                header_row_idx = row_idx
-                print(f'Header row {row_idx}: col_map={col_map}')
+        # ── look for header row (first 20 rows only) ──
+        if not header_found and row_i < 20:
+            text = ' '.join(str(c).lower() for c in row if c is not None)
+            if any(kw in text for kw in ['mortgage', 'auto', 'credit', 'student']):
+                print(f'\nHeader row found at row {row_i}: {[str(c)[:20] for c in row[:10]]}')
+                col_map = detect_columns(row)
+                header_found = True
+                continue
+
+        if not header_found:
             continue
 
-        # ── data rows ────────────────────────────────────────
-        date_val = row[0]
-        date_str = parse_quarter_date(date_val)
+        # ── parse data row ──
+        date_str = parse_date(row[0])
         if not date_str:
             continue
 
         for key, ci in col_map.items():
-            if ci >= len(row):
-                continue
-            raw_val = row[ci]
-            if raw_val is None:
+            if ci >= len(row) or row[ci] is None:
                 continue
             try:
-                val = float(raw_val)
-                # NY Fed reports as percentage already (e.g. 3.5 means 3.5%)
+                val = float(row[ci])
                 data[key].append({'date': date_str, 'value': round(val, 4)})
             except (ValueError, TypeError):
-                continue
+                pass
 
-    # Sort each series by date
-    for key in data:
-        data[key].sort(key=lambda r: r['date'])
-        print(f'  {key}: {len(data[key])} records')
+    for key, records in data.items():
+        records.sort(key=lambda r: r['date'])
+        print(f'  {key}: {len(records)} records', end='')
+        if records:
+            print(f'  [{records[0]["date"]} … {records[-1]["date"]}]')
+        else:
+            print()
 
     return data
 
@@ -175,14 +215,22 @@ def main():
     content, source_url = download_latest()
 
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-    print(f'Sheets: {wb.sheetnames}')
+    log_workbook_structure(wb)
 
+    print('\nScoring sheets to find delinquency data…')
     ws   = find_delinquency_sheet(wb)
     data = extract_data(ws)
 
+    total = sum(len(v) for v in data.values())
+    if total == 0:
+        raise RuntimeError(
+            'Extracted 0 records — sheet/column detection failed. '
+            'Check the logs above to see sheet names and row contents.'
+        )
+
     out = {
-        'updated': datetime.now(timezone.utc).isoformat() + 'Z',
-        'source': source_url,
+        'updated': datetime.now(timezone.utc).isoformat(),
+        'source':  source_url,
         **data,
     }
 
@@ -190,7 +238,7 @@ def main():
     with open(DATA_PATH, 'w') as f:
         json.dump(out, f, separators=(',', ':'))
 
-    print(f'Saved to {DATA_PATH}')
+    print(f'\nSaved {total} total records to {DATA_PATH}')
 
 
 if __name__ == '__main__':
