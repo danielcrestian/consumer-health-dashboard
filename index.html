@@ -36,41 +36,40 @@
       -webkit-text-size-adjust: 100%;
     }
 
-    /* ── MODAL ── */
-    .modal-backdrop {
+    /* ── INFO PANEL ── */
+    .info-panel {
       display: none;
       position: fixed; inset: 0; z-index: 100;
       background: rgba(0,0,0,.5);
       align-items: center; justify-content: center;
       padding: 24px;
     }
-    .modal-backdrop.open { display: flex; }
-    .modal-box {
+    .info-panel.open { display: flex; }
+    .info-box {
       background: #fff;
       border-radius: 16px;
-      padding: 28px 24px;
+      padding: 24px 20px 20px;
       width: 100%; max-width: 400px;
       box-shadow: 0 20px 60px rgba(0,0,0,.3);
     }
-    .modal-box h2 { font-size: 1.2rem; margin-bottom: 8px; }
-    .modal-box p  { font-size: .9rem; color: var(--gray-600); margin-bottom: 16px; line-height: 1.5; }
-    .modal-box a  { color: var(--teal); }
-    .modal-input {
-      width: 100%; padding: 12px 14px;
-      border: 1.5px solid var(--gray-200);
-      border-radius: 10px; font-size: 1rem;
-      outline: none; margin-bottom: 12px;
+    .info-box h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 14px; }
+    .info-row {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 8px 0; border-bottom: 1px solid var(--gray-100);
+      font-size: .82rem;
     }
-    .modal-input:focus { border-color: var(--teal); }
-    .btn-primary {
-      width: 100%; padding: 13px;
-      background: var(--teal); color: #fff;
+    .info-row:last-of-type { border-bottom: none; }
+    .info-src  { font-weight: 600; color: var(--gray-800); }
+    .info-meta { color: var(--gray-400); text-align: right; font-size: .75rem; line-height: 1.4; }
+    .btn-close {
+      width: 100%; padding: 11px;
+      background: var(--gray-100); color: var(--gray-800);
       border: none; border-radius: 10px;
-      font-size: 1rem; font-weight: 600;
+      font-size: .95rem; font-weight: 600;
       cursor: pointer; touch-action: manipulation;
+      margin-top: 14px;
     }
-    .btn-primary:active { opacity: .85; }
-    .modal-note { font-size: .78rem; color: var(--gray-400); margin-top: 10px; text-align: center; }
+    .btn-close:active { background: var(--gray-200); }
 
     /* ── HEADER ── */
     header {
@@ -265,16 +264,27 @@
 </head>
 <body>
 
-<!-- ═══════════════════ API KEY MODAL ═══════════════════ -->
-<div class="modal-backdrop" id="apiModal">
-  <div class="modal-box">
-    <h2>FRED API Key Required</h2>
-    <p>This dashboard pulls live data from the Federal Reserve (FRED). A free API key takes 2 minutes to get.</p>
-    <input class="modal-input" id="apiKeyInput" type="text" placeholder="Paste your FRED API key here" autocomplete="off" autocorrect="off" autocapitalize="none">
-    <button class="btn-primary" onclick="saveKey()">Save &amp; Load Dashboard</button>
-    <p class="modal-note">
-      Get a free key at <a href="https://fred.stlouisfed.org/docs/api/api_key.html" target="_blank">fred.stlouisfed.org</a>
-    </p>
+<!-- ═══════════════════ INFO PANEL ═══════════════════ -->
+<div class="info-panel" id="infoPanel">
+  <div class="info-box">
+    <h2>Data Sources</h2>
+    <div class="info-row">
+      <span class="info-src">Delinquency</span>
+      <span class="info-meta">NY Fed / Equifax<br>Quarterly · auto-updated daily</span>
+    </div>
+    <div class="info-row">
+      <span class="info-src">FRED Indicators</span>
+      <span class="info-meta">Federal Reserve<br>Monthly/Quarterly · auto-updated daily</span>
+    </div>
+    <div class="info-row">
+      <span class="info-src">TSA Throughput</span>
+      <span class="info-meta">TSA.gov<br>Daily · currently unavailable (site blocks servers)</span>
+    </div>
+    <div class="info-row" id="infoUpdated">
+      <span class="info-src">Last data refresh</span>
+      <span class="info-meta" id="infoUpdatedVal">—</span>
+    </div>
+    <button class="btn-close" onclick="closeInfo()">Close</button>
   </div>
 </div>
 
@@ -344,8 +354,6 @@
 //  CONFIG
 // ═══════════════════════════════════════════════════════════
 
-const FRED_ROOT = 'https://api.stlouisfed.org/fred/series/observations';
-
 const METRICS = [
   // ── Delinquency (local JSON from GitHub Action) ──────────
   { id:'delinq_mortgage', name:'Mortgage 90+',          src:'local_delinq', key:'mortgage',     freq:'quarterly', unit:'%',  goodDir:'down', color:'#9ca3af', section:null },
@@ -372,48 +380,25 @@ const METRICS = [
 //  STATE
 // ═══════════════════════════════════════════════════════════
 
-let apiKey  = localStorage.getItem('fredApiKey') || '';
 let cache   = {};          // metricId → [{date, value}]
 let charts  = {};          // chart instances keyed by canvas id
 let sparkRegistry = [];    // chart instances to destroy on refresh
 
 // ═══════════════════════════════════════════════════════════
-//  API KEY
+//  INFO PANEL
 // ═══════════════════════════════════════════════════════════
-
-function saveKey() {
-  const v = document.getElementById('apiKeyInput').value.trim();
-  if (!v) { alert('Please enter your FRED API key.'); return; }
-  apiKey = v;
-  localStorage.setItem('fredApiKey', v);
-  document.getElementById('apiModal').classList.remove('open');
-  // Clear FRED cache slots and re-render to load FRED metrics
-  METRICS.filter(m => m.src === 'fred').forEach(m => { delete cache[m.id]; });
-  loadAndRender();
-}
 
 function openSettings() {
-  document.getElementById('apiKeyInput').value = apiKey;
-  document.getElementById('apiModal').classList.add('open');
+  document.getElementById('infoPanel').classList.add('open');
+}
+function closeInfo() {
+  document.getElementById('infoPanel').classList.remove('open');
 }
 
 // ═══════════════════════════════════════════════════════════
-//  DATA FETCHING
+//  DATA FETCHING — all data comes from pre-built JSON files
+//  populated nightly by GitHub Actions (no API key in browser)
 // ═══════════════════════════════════════════════════════════
-
-async function fredFetch(sid) {
-  if (cache[sid]) return cache[sid];
-  const url = `${FRED_ROOT}?series_id=${sid}&api_key=${apiKey}&file_type=json&limit=400&sort_order=asc`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`FRED ${sid}: HTTP ${r.status}`);
-  const j = await r.json();
-  if (j.error_message) throw new Error(`FRED ${sid}: ${j.error_message}`);
-  const pts = j.observations
-    .filter(o => o.value !== '.')
-    .map(o => ({ date: new Date(o.date), value: parseFloat(o.value) }));
-  cache[sid] = pts;
-  return pts;
-}
 
 async function localFetch(file) {
   try {
@@ -424,36 +409,38 @@ async function localFetch(file) {
 }
 
 async function loadAllData() {
-  const errors = [];
-
-  // FRED metrics (parallel) — skip entirely if no API key is set
-  if (apiKey) {
-    const fredMetrics = METRICS.filter(m => m.src === 'fred');
-    await Promise.allSettled(fredMetrics.map(async m => {
-      try {
-        cache[m.id] = await fredFetch(m.sid);
-      } catch(e) {
-        errors.push(e.message);
-        cache[m.id] = null;
-      }
-    }));
-  }
-
-  // Local: delinquency
+  // Delinquency (NY Fed)
   const delinqJson = await localFetch('delinquency');
   if (delinqJson) {
-    ['mortgage','auto','credit_card','student_loan'].forEach(key => {
-      const idMap = { mortgage:'delinq_mortgage', auto:'delinq_auto', credit_card:'delinq_card', student_loan:'delinq_student' };
+    const idMap = { mortgage:'delinq_mortgage', auto:'delinq_auto',
+                    credit_card:'delinq_card', student_loan:'delinq_student' };
+    for (const [key, id] of Object.entries(idMap)) {
       const arr = delinqJson[key];
-      if (Array.isArray(arr)) {
-        cache[idMap[key]] = arr.map(r => ({ date: new Date(r.date), value: r.value }));
+      if (Array.isArray(arr) && arr.length) {
+        cache[id] = arr.map(r => ({ date: new Date(r.date), value: r.value }));
       }
-    });
+    }
   }
 
-  // Local: TSA — convert raw counts to YoY %
+  // FRED indicators (pre-fetched by GitHub Action → data/fred.json)
+  const fredJson = await localFetch('fred');
+  if (fredJson) {
+    METRICS.filter(m => m.src === 'fred').forEach(m => {
+      const arr = fredJson[m.id];
+      if (Array.isArray(arr) && arr.length) {
+        cache[m.id] = arr.map(r => ({ date: new Date(r.date), value: r.value }));
+      }
+    });
+    // Update the info panel timestamp
+    if (fredJson.updated) {
+      const el = document.getElementById('infoUpdatedVal');
+      if (el) el.textContent = new Date(fredJson.updated).toLocaleString();
+    }
+  }
+
+  // TSA throughput (blocked by TSA.gov on cloud IPs — may be empty)
   const tsaJson = await localFetch('tsa');
-  if (tsaJson && Array.isArray(tsaJson.data)) {
+  if (tsaJson && Array.isArray(tsaJson.data) && tsaJson.data.length) {
     const sorted = [...tsaJson.data].sort((a,b) => a.date < b.date ? -1 : 1);
     const dateMap = {};
     sorted.forEach(r => { dateMap[r.date] = r.value; });
@@ -463,16 +450,14 @@ async function loadAllData() {
       d.setFullYear(d.getFullYear() - 1);
       const lyKey = d.toISOString().slice(0,10);
       if (dateMap[lyKey]) {
-        yoyPts.push({
-          date: new Date(r.date),
-          value: ((r.value - dateMap[lyKey]) / dateMap[lyKey]) * 100
-        });
+        yoyPts.push({ date: new Date(r.date),
+          value: ((r.value - dateMap[lyKey]) / dateMap[lyKey]) * 100 });
       }
     });
     cache['tsa'] = yoyPts;
   }
 
-  return errors;
+  return [];   // errors array kept for API compatibility
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -658,12 +643,9 @@ function renderCards() {
     card.onclick = () => goToAnalysis(m.id);
 
     if (!stats) {
-      const needsKey = m.src === 'fred' && !apiKey;
       card.innerHTML = `
         <div class="card-name">${m.name}</div>
-        <div class="card-loading">${needsKey
-          ? '<span style="font-size:.75rem">🔑 Tap ⚙️ to add<br>FRED API key</span>'
-          : '<span class="spinner"></span>'}</div>`;
+        <div class="card-loading"><span class="spinner"></span></div>`;
     } else {
       const sparkId = `spark-${m.id}`;
       card.innerHTML = `
@@ -930,12 +912,10 @@ async function refreshAll() {
   btn.disabled = true;
   btn.textContent = '↻ Loading…';
 
-  // Destroy spark charts
+  // Destroy spark charts and clear cache so files are re-fetched
   sparkRegistry.forEach(c => c.destroy());
   sparkRegistry = [];
-
-  // Clear FRED cache (keep local unless stale)
-  METRICS.filter(m=>m.src==='fred').forEach(m => { delete cache[m.sid]; delete cache[m.id]; });
+  Object.keys(cache).forEach(k => delete cache[k]);
 
   await loadAndRender();
 
@@ -965,14 +945,9 @@ async function loadAndRender() {
 }
 
 async function bootstrap() {
-  // Always load local data (delinquency + TSA) immediately — no API key needed
   await loadAndRender();
+  // Auto-refresh every 6 hours
   setInterval(loadAndRender, 6 * 60 * 60 * 1000);
-
-  // Show FRED key modal only if not already stored
-  if (!apiKey) {
-    document.getElementById('apiModal').classList.add('open');
-  }
 }
 
 // ── Start ──
