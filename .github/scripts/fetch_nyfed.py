@@ -50,6 +50,11 @@ def download_latest():
 
 # ── sheet & data discovery ────────────────────────────────────────────────────
 
+def is_data_sheet(ws):
+    """Return True only for regular worksheets (not Chart sheets)."""
+    return hasattr(ws, 'iter_rows')
+
+
 def log_workbook_structure(wb):
     """Print full structure so we can diagnose parsing issues."""
     print(f'\n=== Workbook has {len(wb.sheetnames)} sheets ===')
@@ -58,6 +63,8 @@ def log_workbook_structure(wb):
 
     for name in wb.sheetnames:
         ws = wb[name]
+        if not is_data_sheet(ws):
+            continue          # skip Chartsheet objects
         print(f'\n--- First 8 rows of sheet "{name}" ---')
         for i, row in enumerate(ws.iter_rows(values_only=True)):
             if i >= 8:
@@ -68,37 +75,42 @@ def log_workbook_structure(wb):
 
 def find_delinquency_sheet(wb):
     """
-    Score every sheet: the one with the most quarterly date entries
-    AND at least one column matching loan-type keywords wins.
+    Target 'Page 11 Data' — the NY Fed sheet for 90+ day delinquency.
+    Falls back to scoring if the sheet name changes in future releases.
     """
-    LOAN_KEYS = ['mortgage', 'auto', 'credit', 'student']
-    DATE_RE   = re.compile(r'(19|20)\d{2}')   # bare year or part of date
+    # Primary: known sheet name from NY Fed HHDC Excel format
+    PREFERRED = ['Page 11 Data', 'page 11 data', 'Page11Data']
+    for name in PREFERRED:
+        if name in wb.sheetnames:
+            print(f'Found target sheet: "{name}"')
+            return wb[name]
 
+    # Fallback: score data sheets by loan-type keyword matches
+    print('WARNING: "Page 11 Data" not found — falling back to scoring')
+    LOAN_KEYS = ['mortgage', 'auto', 'credit', 'student']
+    DATE_RE   = re.compile(r'(19|20)\d{2}')
     best_name, best_score = None, -1
 
     for name in wb.sheetnames:
-        ws      = wb[name]
-        rows    = list(ws.iter_rows(min_row=1, max_row=60, values_only=True))
-        score   = 0
-
-        # Does any header row mention loan types?
+        ws = wb[name]
+        if not is_data_sheet(ws):
+            continue
+        rows  = list(ws.iter_rows(min_row=1, max_row=60, values_only=True))
+        score = 0
         for row in rows[:10]:
             text = ' '.join(str(c).lower() for c in row if c is not None)
             for kw in LOAN_KEYS:
                 if kw in text:
                     score += 10
-
-        # How many rows look like quarterly date rows?
         for row in rows:
             first = str(row[0]).strip() if row[0] is not None else ''
             if DATE_RE.search(first):
                 score += 1
-
         print(f'  Sheet "{name}" score: {score}')
         if score > best_score:
             best_score, best_name = score, name
 
-    print(f'\nSelected sheet: "{best_name}" (score {best_score})')
+    print(f'Selected: "{best_name}" (score {best_score})')
     return wb[best_name]
 
 
