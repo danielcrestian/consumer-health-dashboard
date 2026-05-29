@@ -193,9 +193,13 @@ def extract_data(ws):
             continue
 
         # ── look for header row (first 20 rows only) ──
+        # Require 2+ distinct loan-type keywords to avoid false-matching
+        # "Source: New York Fed Consumer Credit Panel" (contains 'credit')
         if not header_found and row_i < 20:
             text = ' '.join(str(c).lower() for c in row if c is not None)
-            if any(kw in text for kw in ['mortgage', 'auto', 'credit', 'student']):
+            # 'heloc' only ever appears in actual column headers, never in notes
+            loan_hits = sum(1 for kw in ['mortgage', 'heloc', 'auto', 'student'] if kw in text)
+            if loan_hits >= 2:
                 print(f'\nHeader row found at row {row_i}: {[str(c)[:20] for c in row[:10]]}')
                 col_map = detect_columns(row)
                 header_found = True
