@@ -23,7 +23,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install requests beautifulsoup4 openpyxl
+        run: pip install -r requirements.txt
 
       - name: Fetch TSA checkpoint data
         run: python .github/scripts/fetch_tsa.py
