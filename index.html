@@ -387,7 +387,9 @@ function saveKey() {
   apiKey = v;
   localStorage.setItem('fredApiKey', v);
   document.getElementById('apiModal').classList.remove('open');
-  bootstrap();
+  // Clear FRED cache slots and re-render to load FRED metrics
+  METRICS.filter(m => m.src === 'fred').forEach(m => { delete cache[m.id]; });
+  loadAndRender();
 }
 
 function openSettings() {
@@ -424,16 +426,18 @@ async function localFetch(file) {
 async function loadAllData() {
   const errors = [];
 
-  // FRED metrics (parallel)
-  const fredMetrics = METRICS.filter(m => m.src === 'fred');
-  await Promise.allSettled(fredMetrics.map(async m => {
-    try {
-      cache[m.id] = await fredFetch(m.sid);
-    } catch(e) {
-      errors.push(e.message);
-      cache[m.id] = null;
-    }
-  }));
+  // FRED metrics (parallel) — skip entirely if no API key is set
+  if (apiKey) {
+    const fredMetrics = METRICS.filter(m => m.src === 'fred');
+    await Promise.allSettled(fredMetrics.map(async m => {
+      try {
+        cache[m.id] = await fredFetch(m.sid);
+      } catch(e) {
+        errors.push(e.message);
+        cache[m.id] = null;
+      }
+    }));
+  }
 
   // Local: delinquency
   const delinqJson = await localFetch('delinquency');
@@ -654,9 +658,12 @@ function renderCards() {
     card.onclick = () => goToAnalysis(m.id);
 
     if (!stats) {
+      const needsKey = m.src === 'fred' && !apiKey;
       card.innerHTML = `
         <div class="card-name">${m.name}</div>
-        <div class="card-loading"><span class="spinner"></span></div>`;
+        <div class="card-loading">${needsKey
+          ? '<span style="font-size:.75rem">🔑 Tap ⚙️ to add<br>FRED API key</span>'
+          : '<span class="spinner"></span>'}</div>`;
     } else {
       const sparkId = `spark-${m.id}`;
       card.innerHTML = `
@@ -958,13 +965,14 @@ async function loadAndRender() {
 }
 
 async function bootstrap() {
+  // Always load local data (delinquency + TSA) immediately — no API key needed
+  await loadAndRender();
+  setInterval(loadAndRender, 6 * 60 * 60 * 1000);
+
+  // Show FRED key modal only if not already stored
   if (!apiKey) {
     document.getElementById('apiModal').classList.add('open');
-    return;
   }
-  await loadAndRender();
-  // Auto-refresh every 6 hours
-  setInterval(loadAndRender, 6 * 60 * 60 * 1000);
 }
 
 // ── Start ──
