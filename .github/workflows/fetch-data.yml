@@ -21,6 +21,7 @@ jobs:
 
       - name: Fetch TSA checkpoint data
         run: python .github/scripts/fetch_tsa.py
+        continue-on-error: true   # TSA.gov blocks cloud IPs; don't fail the whole job
 
       - name: Fetch NY Fed delinquency data
         run: python .github/scripts/fetch_nyfed.py
