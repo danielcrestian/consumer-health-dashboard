@@ -7,7 +7,7 @@ NY Fed Excel URL pattern:
   https://www.newyorkfed.org/medialibrary/interactives/householdcredit/data/xls/hhd_c_report_YYYYqN.xlsx
 """
 import io, json, os, re
-from datetime import datetime
+from datetime import datetime, timezone
 
 import openpyxl
 import requests
@@ -29,14 +29,19 @@ def quarter_sequence(start_year: int, start_q: int, steps: int = 6):
 
 
 def download_latest() -> tuple[bytes, str]:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for y, q in quarter_sequence(now.year, (now.month - 1) // 3 + 1):
         url = f'{BASE_URL}/hhd_c_report_{y}q{q}.xlsx'
         try:
             r = requests.get(url, timeout=30)
-            if r.status_code == 200:
-                print(f'Downloaded: {url}')
-                return r.content, url
+            if r.status_code != 200:
+                continue
+            # XLSX files are ZIP archives — verify magic bytes before parsing
+            if not r.content[:4] == b'PK\x03\x04':
+                print(f'Skipping {url} — not a valid XLSX (got HTML error page?)')
+                continue
+            print(f'Downloaded: {url}')
+            return r.content, url
         except requests.RequestException:
             continue
     raise RuntimeError('Could not find NY Fed Excel file for last 6 quarters')
@@ -176,7 +181,7 @@ def main():
     data = extract_data(ws)
 
     out = {
-        'updated': datetime.utcnow().isoformat() + 'Z',
+        'updated': datetime.now(timezone.utc).isoformat() + 'Z',
         'source': source_url,
         **data,
     }
