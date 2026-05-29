@@ -79,7 +79,9 @@ def find_delinquency_sheet(wb):
     Falls back to scoring if the sheet name changes in future releases.
     """
     # Primary: known sheet name from NY Fed HHDC Excel format
-    PREFERRED = ['Page 11 Data', 'page 11 data', 'Page11Data']
+    # Page 12 = "Percent of Balance 90+ Days Delinquent by Loan Type"
+    # Page 11 = "Total Balance by Delinquency Status" (wrong — that's by bucket, not loan type)
+    PREFERRED = ['Page 12 Data', 'page 12 data', 'Page12Data']
     for name in PREFERRED:
         if name in wb.sheetnames:
             print(f'Found target sheet: "{name}"')
@@ -119,27 +121,33 @@ def find_delinquency_sheet(wb):
 def parse_date(raw):
     """Convert any NY Fed date format to YYYY-MM-DD (first day of quarter)."""
     if isinstance(raw, datetime):
-        # Excel serial date decoded as datetime — snap to nearest quarter
-        m = raw.month
-        q = (m - 1) // 3 + 1
+        q = (raw.month - 1) // 3 + 1
         return f'{raw.year}-{q * 3 - 2:02d}-01'
     if not isinstance(raw, str):
         return None
     raw = raw.strip()
 
-    # "2025:Q1" or "2025:q1"
+    # 4-digit year: "2025:Q1" or "2025:q1"
     m = re.match(r'(\d{4})[:\s\-]?[Qq](\d)', raw)
     if m:
         y, q = int(m.group(1)), int(m.group(2))
         return f'{y}-{q * 3 - 2:02d}-01'
 
-    # "Q1 2025" or "Q1:2025"
+    # 2-digit year: "03:Q1" or "99:Q4"  (NY Fed standard format)
+    m = re.match(r'^(\d{2})[:\s\-]?[Qq](\d)', raw)
+    if m:
+        yy, q = int(m.group(1)), int(m.group(2))
+        # 70–99 → 1970s–1990s; 00–69 → 2000s
+        y = (1900 + yy) if yy >= 70 else (2000 + yy)
+        return f'{y}-{q * 3 - 2:02d}-01'
+
+    # "Q1 2025"
     m = re.match(r'[Qq](\d)[:\s\-]+(\d{4})', raw)
     if m:
         q, y = int(m.group(1)), int(m.group(2))
         return f'{y}-{q * 3 - 2:02d}-01'
 
-    # Bare year like "2003" — assume Q1
+    # Bare 4-digit year: "2003"
     m = re.match(r'^(\d{4})$', raw)
     if m:
         return f'{m.group(1)}-01-01'
