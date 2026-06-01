@@ -22,6 +22,7 @@ SERIES = {
     'sentiment': 'UMCSENT',                 # U of Michigan consumer sentiment
     'retail':    'MRTSSM44W72USS',          # Retail ex-auto & gas
     'lh_emp':    'USLAH',                   # Leisure & hospitality employment
+    'transport': 'DTRANSE',                 # Real PCE: transportation services (proxy for travel demand)
 }
 
 HEADERS = {'User-Agent': 'consumer-health-dashboard/1.0'}

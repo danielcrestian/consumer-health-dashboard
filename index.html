@@ -277,8 +277,8 @@
       <span class="info-meta">Federal Reserve<br>Monthly/Quarterly · auto-updated daily</span>
     </div>
     <div class="info-row">
-      <span class="info-src">TSA Throughput</span>
-      <span class="info-meta">TSA.gov<br>Daily · currently unavailable (site blocks servers)</span>
+      <span class="info-src">Transport Spending</span>
+      <span class="info-meta">BEA via FRED (DTRANSE)<br>Monthly · real PCE on transport services</span>
     </div>
     <div class="info-row" id="infoUpdated">
       <span class="info-src">Last data refresh</span>
@@ -372,8 +372,8 @@ const METRICS = [
   { id:'sentiment',name:'Consumer Sentiment',       sid:'UMCSENT',             src:'fred', freq:'monthly',   unit:'',   goodDir:'up',   color:'#0891b2', section:'sentiment' },
   { id:'retail',   name:'Retail ex-Auto & Gas',     sid:'MRTSSM44W72USS',      src:'fred', freq:'monthly',   unit:'$M', goodDir:'up',   color:'#16a34a', section:'sentiment' },
   // ── Travel Demand ─────────────────────────────────────────
-  { id:'lh_emp',   name:'Leisure & Hosp. Employ.',  sid:'USLAH',               src:'fred', freq:'monthly',   unit:'K',  goodDir:'up',   color:'#7c3aed', section:'travel'  },
-  { id:'tsa',      name:'TSA Throughput (YoY %)',   src:'local_tsa',                        freq:'daily',     unit:'%',  goodDir:'up',   color:'#d97706', section:'travel'  },
+  { id:'lh_emp',    name:'Leisure & Hosp. Employ.',   sid:'USLAH',    src:'fred', freq:'monthly', unit:'K',  goodDir:'up', color:'#7c3aed', section:'travel' },
+  { id:'transport', name:'Transport Spending (Real)', sid:'DTRANSE',  src:'fred', freq:'monthly', unit:'B$', goodDir:'up', color:'#d97706', section:'travel' },
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -436,25 +436,6 @@ async function loadAllData() {
       const el = document.getElementById('infoUpdatedVal');
       if (el) el.textContent = new Date(fredJson.updated).toLocaleString();
     }
-  }
-
-  // TSA throughput (blocked by TSA.gov on cloud IPs — may be empty)
-  const tsaJson = await localFetch('tsa');
-  if (tsaJson && Array.isArray(tsaJson.data) && tsaJson.data.length) {
-    const sorted = [...tsaJson.data].sort((a,b) => a.date < b.date ? -1 : 1);
-    const dateMap = {};
-    sorted.forEach(r => { dateMap[r.date] = r.value; });
-    const yoyPts = [];
-    sorted.forEach(r => {
-      const d = new Date(r.date);
-      d.setFullYear(d.getFullYear() - 1);
-      const lyKey = d.toISOString().slice(0,10);
-      if (dateMap[lyKey]) {
-        yoyPts.push({ date: new Date(r.date),
-          value: ((r.value - dateMap[lyKey]) / dateMap[lyKey]) * 100 });
-      }
-    });
-    cache['tsa'] = yoyPts;
   }
 
   return [];   // errors array kept for API compatibility
@@ -698,7 +679,7 @@ function populateSelect() {
     { label:'Financial Stress',       ids:['cc_util','savings','dsr','rdpi'] },
     { label:'Labor & Wages',          ids:['wages','claims'] },
     { label:'Sentiment & Spending',   ids:['sentiment','retail'] },
-    { label:'Travel Demand',          ids:['lh_emp','tsa'] },
+    { label:'Travel Demand',          ids:['lh_emp','transport'] },
   ];
   groups.forEach(g => {
     const og = document.createElement('optgroup');
