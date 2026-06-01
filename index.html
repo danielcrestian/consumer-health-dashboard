@@ -214,6 +214,23 @@
     .toggle-btn.off { opacity: .4; }
     .analysis-chart-wrap { position: relative; height: 240px; }
 
+    /* ── METRIC DESCRIPTION CARD ── */
+    .desc-card {
+      margin: 8px 16px 0;
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid var(--gray-200);
+      overflow: hidden;
+    }
+    .desc-accent { height: 4px; }
+    .desc-body { padding: 13px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .desc-label {
+      font-size: .7rem; text-transform: uppercase;
+      letter-spacing: .06em; font-weight: 700;
+      color: var(--gray-400); margin-bottom: 2px;
+    }
+    .desc-text { font-size: .84rem; line-height: 1.55; color: var(--gray-600); }
+
     /* ── STATS SECTIONS ── */
     .stats-card {
       margin: 8px 16px;
@@ -375,6 +392,68 @@ const METRICS = [
   { id:'lh_emp',    name:'Leisure & Hosp. Employ.',   sid:'CEU7000000001', src:'fred', freq:'monthly', unit:'K',  goodDir:'up', color:'#7c3aed', section:'travel' },
   { id:'transport', name:'Consumer Spending (PCE)',   sid:'PCE',           src:'fred', freq:'monthly', unit:'B$', goodDir:'up', color:'#d97706', section:'travel' },
 ];
+
+// ═══════════════════════════════════════════════════════════
+//  METRIC DESCRIPTIONS  (what it measures + why it matters)
+// ═══════════════════════════════════════════════════════════
+const METRIC_DESCRIPTIONS = {
+  delinq_mortgage: {
+    what: 'Share of mortgage balances 90+ days past due — NY Fed Consumer Credit Panel / Equifax, reported quarterly.',
+    why:  'Mortgage delinquencies are a lagging but high-stakes signal. Homeowners typically exhaust every other option before missing a payment, so when rates rise sharply it often precedes broad credit tightening and housing market stress.'
+  },
+  delinq_auto: {
+    what: 'Share of auto loan balances 90+ days past due — NY Fed / Equifax, reported quarterly.',
+    why:  'Consumers typically miss car payments before rent or mortgages because a car is essential for earning income. Rising auto delinquencies are an early warning of cash-flow stress spreading through households.'
+  },
+  delinq_card: {
+    what: 'Share of credit card balances 90+ days past due — NY Fed / Equifax, reported quarterly.',
+    why:  'Credit cards are unsecured debt, so lenders react quickly by cutting limits when delinquencies climb — amplifying the stress. One of the most sensitive real-time reads on consumer financial health.'
+  },
+  delinq_student: {
+    what: 'Share of student loan balances 90+ days past due — NY Fed / Equifax, reported quarterly.',
+    why:  'Elevated student loan delinquency suppresses household formation and discretionary spending among younger consumers, creating a long-running drag on demand that shows up in sectors like housing and travel.'
+  },
+  cc_util: {
+    what: 'Median credit card utilization rate: the fraction of available revolving credit currently in use (NY Fed, monthly).',
+    why:  'When utilization climbs, consumers are increasingly relying on credit to cover expenses rather than income. Sustained high utilization typically precedes delinquency spikes by 2–4 quarters and is a leading stress indicator.'
+  },
+  savings: {
+    what: 'Personal saving rate: after-tax income minus spending, as a percentage of disposable personal income (BEA, monthly).',
+    why:  'The savings rate reveals whether households are building cushion or running it down. A very low rate leaves consumers vulnerable to any income shock; spending often falls sharply once the buffer is gone.'
+  },
+  dsr: {
+    what: 'Household Debt Service Ratio: total required debt payments (mortgage + consumer debt) as a share of disposable income (Federal Reserve, quarterly).',
+    why:  'Higher debt service leaves less room to spend, save, or absorb rate hikes. When DSR climbs, consumer spending tends to soften — especially for big-ticket discretionary items like travel and dining.'
+  },
+  rdpi: {
+    what: 'Real Disposable Personal Income: after-tax household income adjusted for inflation, in chained 2017 dollars (BEA, monthly).',
+    why:  'This is the true purchasing power available to households. When real incomes stagnate or fall, consumer spending eventually follows — making RDPI a foundational leading indicator for retail, travel, and leisure demand.'
+  },
+  wages: {
+    what: 'Real median usual weekly earnings for full-time wage and salary workers, inflation-adjusted (BLS, quarterly).',
+    why:  'Tracks whether the typical worker\'s paycheck is gaining ground after inflation. Stagnant real wages compress spending capacity even when headline employment looks healthy, and they deepen financial stress when household debt is elevated.'
+  },
+  claims: {
+    what: '4-week moving average of new unemployment insurance claims (Dept. of Labor, weekly — released every Thursday).',
+    why:  'The most timely labor-market signal available, weeks ahead of the monthly jobs report. A sustained rise signals accelerating layoffs that can quickly erode consumer confidence and spending — especially in leisure and hospitality.'
+  },
+  sentiment: {
+    what: 'University of Michigan Consumer Sentiment Index: a monthly survey of household attitudes toward current finances, buying conditions, and 12-month economic expectations.',
+    why:  'Sentiment is a reliable leading indicator because feelings drive decisions. When households turn pessimistic, they cut discretionary spending and defer big purchases before hard economic data deteriorates — making this a critical early-warning signal.'
+  },
+  retail: {
+    what: 'Retail and food services sales excluding automobiles and gasoline, in millions of dollars (Census Bureau, monthly).',
+    why:  'Stripping out volatile auto and gas price swings reveals the underlying trend in core consumer demand. Sustained growth confirms spending health; deceleration typically precedes broader economic weakness by 1–2 quarters.'
+  },
+  lh_emp: {
+    what: 'Total payroll employment in leisure and hospitality — hotels, restaurants, bars, arts, and entertainment (BLS, monthly).',
+    why:  'A direct barometer of discretionary consumer spending and travel activity. This sector is highly cyclical: it\'s among the first to shed jobs in a downturn and among the first to recover when consumer confidence returns.'
+  },
+  transport: {
+    what: 'Personal Consumption Expenditures (PCE): total household spending across all categories, in billions of current dollars (BEA, monthly).',
+    why:  'PCE represents roughly 70% of U.S. GDP and captures everything households spend — goods, services, housing, healthcare. A sustained slowdown is often the first GDP-level warning sign of a contraction.'
+  },
+};
 
 // ═══════════════════════════════════════════════════════════
 //  STATE
@@ -716,7 +795,24 @@ function runAnalysis() {
     return { x:p.date, y: avg(a.slice(i-k+1,i+1).map(r=>r.value)) };
   });
 
+  const desc = METRIC_DESCRIPTIONS[id];
+  const descHtml = desc ? `
+    <div class="desc-card">
+      <div class="desc-accent" style="background:${m.color}"></div>
+      <div class="desc-body">
+        <div>
+          <div class="desc-label">What it measures</div>
+          <div class="desc-text">${desc.what}</div>
+        </div>
+        <div>
+          <div class="desc-label">Why it matters</div>
+          <div class="desc-text">${desc.why}</div>
+        </div>
+      </div>
+    </div>` : '';
+
   body.innerHTML = `
+    ${descHtml}
     <!-- Analysis chart -->
     <div class="analysis-chart-card">
       <div class="overlay-toggles" id="overlayToggles">
