@@ -29,27 +29,32 @@ HEADERS = {'User-Agent': 'consumer-health-dashboard/1.0'}
 
 
 def fetch_series(sid):
-    # Use sort_order=desc so we always get the N most-recent observations,
-    # regardless of when the series began.  Avoids the observation_start
-    # bug where certain series silently returned 0 records.
+    # Strategy: use FRED's default sort (asc) with a high limit so we get
+    # every record the series has, then trim to the 500 most recent in Python.
+    # This avoids two bugs we discovered:
+    #   - observation_start silently returns 0 for certain series (IC4WSA etc.)
+    #   - sort_order=desc silently returns 0 for other series (TDSP etc.)
+    # FRED max limit is 100000; 10000 is well above any series we use.
     params = {
-        'series_id':  sid,
-        'api_key':    API_KEY,
-        'file_type':  'json',
-        'limit':      500,        # ~40 yrs of monthly data; plenty of history
-        'sort_order': 'desc',     # newest first
+        'series_id': sid,
+        'api_key':   API_KEY,
+        'file_type': 'json',
+        'limit':     10000,
     }
     r = requests.get(FRED_URL, params=params, headers=HEADERS, timeout=30)
     r.raise_for_status()
     j = r.json()
     if 'error_message' in j:
         raise RuntimeError(f'FRED API error for {sid}: {j["error_message"]}')
+    raw = j.get('observations', [])
     pts = [
         {'date': o['date'], 'value': round(float(o['value']), 4)}
-        for o in j['observations']
+        for o in raw
         if o['value'] != '.'
     ]
-    return list(reversed(pts))   # return in chronological (asc) order
+    print(f'  raw={len(raw)} obs, {len(pts)} non-dot', end='  ')
+    # FRED returns asc by default; keep last 500 points (most recent history)
+    return pts[-500:]
 
 
 def main():
