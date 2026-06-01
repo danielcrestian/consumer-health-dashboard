@@ -2,7 +2,7 @@
 Fetches all FRED economic series used by the Consumer Health Dashboard
 and saves to data/fred.json.  Requires FRED_API_KEY environment variable.
 """
-import json, os, sys
+import json, os, sys, time
 import requests
 from datetime import datetime, timezone
 
@@ -76,6 +76,7 @@ def main():
             print(f'FAILED — {e}')
             out[key] = []
             failed.append(key)
+        time.sleep(1.1)   # FRED free tier: max 120 req/min; 1.1s keeps us at ~54/min
 
     os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
     with open(DATA_PATH, 'w') as f:
