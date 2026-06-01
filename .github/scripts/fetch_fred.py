@@ -17,25 +17,27 @@ SERIES = {
     'savings':   'PSAVERT',                 # Personal saving rate
     'dsr':       'TDSP',                    # Household debt service ratio
     'rdpi':      'DSPIC96',                 # Real disposable personal income
-    'wages':     'LES1252881600Q',          # Real median usual weekly earnings
-    'claims':    'IC4WSA',                  # Initial claims (4-wk avg)
+    'wages':     'LES1252881600Q',          # Real median usual weekly earnings (quarterly)
+    'claims':    'IC4WSA',                  # Initial jobless claims (4-wk avg, weekly)
     'sentiment': 'UMCSENT',                 # U of Michigan consumer sentiment
     'retail':    'MRTSSM44W72USS',          # Retail ex-auto & gas
-    'lh_emp':    'USLAH',                   # Leisure & hospitality employment
-    'transport': 'DTRANSE',                 # Real PCE: transportation services (proxy for travel demand)
+    'lh_emp':    'CEU7000000001',           # All employees: Leisure & hospitality (BLS)
+    'transport': 'PCE',                     # Personal consumption expenditures (proxy for spending)
 }
 
 HEADERS = {'User-Agent': 'consumer-health-dashboard/1.0'}
 
 
 def fetch_series(sid):
+    # Use sort_order=desc so we always get the N most-recent observations,
+    # regardless of when the series began.  Avoids the observation_start
+    # bug where certain series silently returned 0 records.
     params = {
-        'series_id':         sid,
-        'api_key':           API_KEY,
-        'file_type':         'json',
-        'limit':             2000,           # weekly series can have 1800+ points
-        'sort_order':        'asc',
-        'observation_start': '1990-01-01',   # 35+ yrs of history is plenty
+        'series_id':  sid,
+        'api_key':    API_KEY,
+        'file_type':  'json',
+        'limit':      500,        # ~40 yrs of monthly data; plenty of history
+        'sort_order': 'desc',     # newest first
     }
     r = requests.get(FRED_URL, params=params, headers=HEADERS, timeout=30)
     r.raise_for_status()
@@ -47,7 +49,7 @@ def fetch_series(sid):
         for o in j['observations']
         if o['value'] != '.'
     ]
-    return pts
+    return list(reversed(pts))   # return in chronological (asc) order
 
 
 def main():

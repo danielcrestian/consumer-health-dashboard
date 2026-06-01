@@ -277,8 +277,8 @@
       <span class="info-meta">Federal Reserve<br>Monthly/Quarterly · auto-updated daily</span>
     </div>
     <div class="info-row">
-      <span class="info-src">Transport Spending</span>
-      <span class="info-meta">BEA via FRED (DTRANSE)<br>Monthly · real PCE on transport services</span>
+      <span class="info-src">Consumer Spending (PCE)</span>
+      <span class="info-meta">BEA via FRED (PCE)<br>Monthly · total personal consumption expenditures</span>
     </div>
     <div class="info-row" id="infoUpdated">
       <span class="info-src">Last data refresh</span>
@@ -372,8 +372,8 @@ const METRICS = [
   { id:'sentiment',name:'Consumer Sentiment',       sid:'UMCSENT',             src:'fred', freq:'monthly',   unit:'',   goodDir:'up',   color:'#0891b2', section:'sentiment' },
   { id:'retail',   name:'Retail ex-Auto & Gas',     sid:'MRTSSM44W72USS',      src:'fred', freq:'monthly',   unit:'$M', goodDir:'up',   color:'#16a34a', section:'sentiment' },
   // ── Travel Demand ─────────────────────────────────────────
-  { id:'lh_emp',    name:'Leisure & Hosp. Employ.',   sid:'USLAH',    src:'fred', freq:'monthly', unit:'K',  goodDir:'up', color:'#7c3aed', section:'travel' },
-  { id:'transport', name:'Transport Spending (Real)', sid:'DTRANSE',  src:'fred', freq:'monthly', unit:'B$', goodDir:'up', color:'#d97706', section:'travel' },
+  { id:'lh_emp',    name:'Leisure & Hosp. Employ.',   sid:'CEU7000000001', src:'fred', freq:'monthly', unit:'K',  goodDir:'up', color:'#7c3aed', section:'travel' },
+  { id:'transport', name:'Consumer Spending (PCE)',   sid:'PCE',           src:'fred', freq:'monthly', unit:'B$', goodDir:'up', color:'#d97706', section:'travel' },
 ];
 
 // ═══════════════════════════════════════════════════════════
