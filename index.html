@@ -1103,15 +1103,21 @@ function setViewMode(mode, persist) {
 }
 
 function initViewMode() {
-  const saved = localStorage.getItem('viewMode');
-  // Auto-default to desktop on wide screens unless user already chose
-  const auto  = window.innerWidth >= 960 ? 'desktop' : 'mobile';
-  setViewMode(saved || auto, false);
+  const isPhone = window.innerWidth < 600;
+  if (isPhone) {
+    // Phones always start in mobile mode — ignore any saved localStorage value
+    // so tapping Desktop once doesn't permanently break the phone experience.
+    setViewMode('mobile', false);
+  } else {
+    const saved = localStorage.getItem('viewMode');
+    setViewMode(saved || (window.innerWidth >= 960 ? 'desktop' : 'mobile'), false);
+  }
 }
 
 function toggleViewMode() {
   const nowDesktop = !document.body.classList.contains('desktop');
-  setViewMode(nowDesktop ? 'desktop' : 'mobile', true);
+  // Only persist preference on non-phone screens
+  setViewMode(nowDesktop ? 'desktop' : 'mobile', window.innerWidth >= 600);
   // Destroy and re-render all charts so they use the new container heights
   sparkRegistry.forEach(c => c.destroy());
   sparkRegistry = [];
