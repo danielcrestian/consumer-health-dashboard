@@ -160,7 +160,7 @@
     /* ── METRIC CARDS GRID ── */
     .cards-grid {
       display: grid;
-      grid-template-columns: 1fr;   /* single column on mobile */
+      grid-template-columns: 1fr 1fr;
       gap: 10px;
       padding: 0 16px 4px;
     }
@@ -180,7 +180,7 @@
     .card-changes { font-size: .7rem; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
     .card-changes .chg { display: flex; align-items: center; gap: 2px; }
     .chg-label { color: var(--gray-400); font-size: .65rem; }
-    .spark-wrap { margin-top: 8px; height: 52px; position: relative; }
+    .spark-wrap { margin-top: 8px; height: 40px; position: relative; }
     .card-loading { font-size: .78rem; color: var(--gray-400); padding: 20px 0; text-align: center; }
 
     /* ── ANALYSIS TAB ── */
@@ -311,10 +311,12 @@
     body.desktop .section-header { padding: 18px 16px 8px; font-size: .76rem; }
 
     /* ── ANALYSIS 2-COLUMN LAYOUT ──
-       Mobile: block stacking — col-left (desc+chart) above col-right (stats).
-       Desktop: flex-row splits chart left / stats right. */
-    .analysis-layout { display: block; }
-    .analysis-col-left, .analysis-col-right { display: block; }
+       Mobile: display:contents makes the wrapper divs invisible to layout,
+       so children flow as a normal single column.
+       Desktop: wrapper becomes flex-row splitting chart left / stats right. */
+    .analysis-layout,
+    .analysis-col-left,
+    .analysis-col-right { display: contents; }
 
     body.desktop .analysis-layout {
       display: flex; flex-direction: row;
@@ -1101,21 +1103,15 @@ function setViewMode(mode, persist) {
 }
 
 function initViewMode() {
-  const isPhone = window.innerWidth < 600;
-  if (isPhone) {
-    // Phones always start in mobile mode — ignore any saved localStorage value
-    // so tapping Desktop once doesn't permanently break the phone experience.
-    setViewMode('mobile', false);
-  } else {
-    const saved = localStorage.getItem('viewMode');
-    setViewMode(saved || (window.innerWidth >= 960 ? 'desktop' : 'mobile'), false);
-  }
+  const saved = localStorage.getItem('viewMode');
+  // Auto-default to desktop on wide screens unless user already chose
+  const auto  = window.innerWidth >= 960 ? 'desktop' : 'mobile';
+  setViewMode(saved || auto, false);
 }
 
 function toggleViewMode() {
   const nowDesktop = !document.body.classList.contains('desktop');
-  // Only persist preference on non-phone screens
-  setViewMode(nowDesktop ? 'desktop' : 'mobile', window.innerWidth >= 600);
+  setViewMode(nowDesktop ? 'desktop' : 'mobile', true);
   // Destroy and re-render all charts so they use the new container heights
   sparkRegistry.forEach(c => c.destroy());
   sparkRegistry = [];
