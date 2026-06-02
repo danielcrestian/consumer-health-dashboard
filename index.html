@@ -74,7 +74,8 @@
     /* ── HEADER ── */
     header {
       position: fixed; top: 0; left: 0; right: 0; z-index: 50;
-      height: var(--header-h);
+      /* height grows to include the iOS status-bar safe area */
+      height: calc(var(--header-h) + env(safe-area-inset-top, 0));
       padding: env(safe-area-inset-top, 0) 16px 0;
       background: #fff;
       border-bottom: 1px solid var(--gray-200);
@@ -120,7 +121,7 @@
     /* ── MAIN SCROLL AREA ── */
     main.tab-content {
       display: none;
-      padding-top: calc(var(--header-h) + 8px);
+      padding-top: calc(var(--header-h) + env(safe-area-inset-top, 0) + 8px);
       padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0) + 8px);
       min-height: 100dvh;
       overflow-y: auto;
