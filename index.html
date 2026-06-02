@@ -277,6 +277,58 @@
       background: #fef2f2; border: 1px solid #fecaca;
       border-radius: 10px; font-size: .8rem; color: var(--red);
     }
+
+    /* ── VIEW TOGGLE BUTTON ── */
+    .btn-view-toggle {
+      background: var(--gray-100);
+      border: 1.5px solid var(--gray-200);
+      border-radius: 8px; padding: 5px 9px;
+      font-size: .78rem; cursor: pointer;
+      color: var(--gray-600); touch-action: manipulation;
+      white-space: nowrap; line-height: 1;
+    }
+    .btn-view-toggle:active { background: var(--gray-200); }
+    body.desktop .btn-view-toggle {
+      background: #e0f2fe; color: var(--teal); border-color: #bae6fd;
+    }
+
+    /* ── DESKTOP MODE OVERRIDES ── */
+    body.desktop main.tab-content { max-width: 1200px; margin: 0 auto; }
+    body.desktop .cards-grid {
+      grid-template-columns: repeat(3, 1fr); gap: 14px;
+    }
+    body.desktop .card-value   { font-size: 1.65rem; }
+    body.desktop .card-name    { font-size: .75rem; }
+    body.desktop .spark-wrap   { height: 56px; }
+    body.desktop .chart-wrap   { height: 300px; }
+    body.desktop .chart-placeholder { height: 300px; }
+    body.desktop .analysis-chart-wrap { height: 360px; }
+    body.desktop .stat-value   { font-size: 1.15rem; }
+    body.desktop .stat-label   { font-size: .72rem; }
+    body.desktop .stats-grid   { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+    body.desktop .desc-text    { font-size: .88rem; }
+    body.desktop .section-header { padding: 18px 16px 8px; font-size: .76rem; }
+
+    /* ── ANALYSIS 2-COLUMN LAYOUT ──
+       Mobile: display:contents makes the wrapper divs invisible to layout,
+       so children flow as a normal single column.
+       Desktop: wrapper becomes flex-row splitting chart left / stats right. */
+    .analysis-layout,
+    .analysis-col-left,
+    .analysis-col-right { display: contents; }
+
+    body.desktop .analysis-layout {
+      display: flex; flex-direction: row;
+      align-items: flex-start;
+    }
+    body.desktop .analysis-col-left {
+      display: flex; flex-direction: column;
+      flex: 0 0 56%; min-width: 0;
+    }
+    body.desktop .analysis-col-right {
+      display: flex; flex-direction: column;
+      flex: 1; min-width: 0;
+    }
   </style>
 </head>
 <body>
@@ -310,6 +362,7 @@
   <span class="header-title">Consumer Health</span>
   <div class="header-right">
     <span class="header-updated" id="lastUpdated">–</span>
+    <button class="btn-view-toggle" id="viewToggle" onclick="toggleViewMode()" title="Switch layout">🖥 Desktop</button>
     <button class="btn-refresh" id="refreshBtn" onclick="refreshAll()" title="Refresh data">↻ Refresh</button>
     <button class="btn-settings" onclick="openSettings()" title="Settings">⚙️</button>
   </div>
@@ -812,9 +865,11 @@ function runAnalysis() {
     </div>` : '';
 
   body.innerHTML = `
-    ${descHtml}
-    <!-- Analysis chart -->
-    <div class="analysis-chart-card">
+  <div class="analysis-layout">
+    <div class="analysis-col-left">
+      ${descHtml}
+      <!-- Analysis chart -->
+      <div class="analysis-chart-card">
       <div class="overlay-toggles" id="overlayToggles">
         <button class="toggle-btn" style="background:${m.color};color:#fff" data-ds="0" onclick="toggleOverlay(this)">Series</button>
         <button class="toggle-btn off" style="background:#f59e0b;color:#fff" data-ds="1" onclick="toggleOverlay(this)">3-Period</button>
@@ -822,6 +877,8 @@ function runAnalysis() {
       </div>
       <div class="analysis-chart-wrap"><canvas id="aChart"></canvas></div>
     </div>
+    </div><!-- /analysis-col-left -->
+    <div class="analysis-col-right">
 
     <!-- Snapshot -->
     <div class="stats-card">
@@ -907,7 +964,9 @@ function runAnalysis() {
         ${s.postCA != null ? `<div class="stat-item"><div class="stat-label">Post-COVID Avg</div><div class="stat-value">${fmtVal(s.postCA,m.unit,2)}</div><div class="stat-sub">2021–present</div></div>` : ''}
       </div>
     </div>
-    <div style="height:8px"></div>
+    </div><!-- /analysis-col-right -->
+  </div><!-- /analysis-layout -->
+  <div style="height:8px"></div>
   `;
 
   // Render analysis chart
@@ -1027,7 +1086,45 @@ async function bootstrap() {
   setInterval(loadAndRender, 6 * 60 * 60 * 1000);
 }
 
+// ═══════════════════════════════════════════════════════════
+//  VIEW MODE  (mobile ↔ desktop toggle)
+// ═══════════════════════════════════════════════════════════
+
+function setViewMode(mode, persist) {
+  const isDesktop = (mode === 'desktop');
+  document.body.classList.toggle('desktop', isDesktop);
+  const btn = document.getElementById('viewToggle');
+  if (btn) {
+    btn.textContent = isDesktop ? '📱 Mobile' : '🖥 Desktop';
+    btn.title       = isDesktop ? 'Switch to mobile layout' : 'Switch to desktop layout';
+  }
+  if (persist) localStorage.setItem('viewMode', mode);
+}
+
+function initViewMode() {
+  const saved = localStorage.getItem('viewMode');
+  // Auto-default to desktop on wide screens unless user already chose
+  const auto  = window.innerWidth >= 960 ? 'desktop' : 'mobile';
+  setViewMode(saved || auto, false);
+}
+
+function toggleViewMode() {
+  const nowDesktop = !document.body.classList.contains('desktop');
+  setViewMode(nowDesktop ? 'desktop' : 'mobile', true);
+  // Destroy and re-render all charts so they use the new container heights
+  sparkRegistry.forEach(c => c.destroy());
+  sparkRegistry = [];
+  Object.values(charts).forEach(c => c && c.destroy && c.destroy());
+  charts = {};
+  renderDelinquencyChart();
+  renderCards();
+  if (document.getElementById('tab-analysis').classList.contains('active')) {
+    runAnalysis();
+  }
+}
+
 // ── Start ──
+initViewMode();
 bootstrap();
 </script>
 </body>
