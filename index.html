@@ -160,7 +160,7 @@
     /* ── METRIC CARDS GRID ── */
     .cards-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       gap: 10px;
       padding: 0 16px 4px;
     }
@@ -314,9 +314,8 @@
        Mobile: display:contents makes the wrapper divs invisible to layout,
        so children flow as a normal single column.
        Desktop: wrapper becomes flex-row splitting chart left / stats right. */
-    .analysis-layout,
-    .analysis-col-left,
-    .analysis-col-right { display: contents; }
+    .analysis-layout { display: block; }
+    .analysis-col-left, .analysis-col-right { display: block; }
 
     body.desktop .analysis-layout {
       display: flex; flex-direction: row;
@@ -1091,7 +1090,7 @@ async function bootstrap() {
 //  VIEW MODE  (mobile ↔ desktop toggle)
 // ═══════════════════════════════════════════════════════════
 
-function setViewMode(mode, persist) {
+function setViewMode(mode) {
   const isDesktop = (mode === 'desktop');
   document.body.classList.toggle('desktop', isDesktop);
   const btn = document.getElementById('viewToggle');
@@ -1099,19 +1098,17 @@ function setViewMode(mode, persist) {
     btn.textContent = isDesktop ? '📱 Mobile' : '🖥 Desktop';
     btn.title       = isDesktop ? 'Switch to mobile layout' : 'Switch to desktop layout';
   }
-  if (persist) localStorage.setItem('viewMode', mode);
 }
 
 function initViewMode() {
-  const saved = localStorage.getItem('viewMode');
-  // Auto-default to desktop on wide screens unless user already chose
-  const auto  = window.innerWidth >= 960 ? 'desktop' : 'mobile';
-  setViewMode(saved || auto, false);
+  // Auto-detect each session — no localStorage so phones never get
+  // stuck in desktop mode from a previous tap of the toggle.
+  setViewMode(window.innerWidth >= 960 ? 'desktop' : 'mobile');
 }
 
 function toggleViewMode() {
   const nowDesktop = !document.body.classList.contains('desktop');
-  setViewMode(nowDesktop ? 'desktop' : 'mobile', true);
+  setViewMode(nowDesktop ? 'desktop' : 'mobile');
   // Destroy and re-render all charts so they use the new container heights
   sparkRegistry.forEach(c => c.destroy());
   sparkRegistry = [];
