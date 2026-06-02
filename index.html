@@ -1095,7 +1095,7 @@ function setViewMode(mode) {
   document.body.classList.toggle('desktop', isDesktop);
   const btn = document.getElementById('viewToggle');
   if (btn) {
-    btn.textContent = isDesktop ? '🖥 Desktop' : '📱 Mobile';
+    btn.textContent = isDesktop ? '📱 Mobile' : '🖥 Desktop';
     btn.title       = isDesktop ? 'Switch to mobile layout' : 'Switch to desktop layout';
   }
 }
