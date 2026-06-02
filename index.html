@@ -311,12 +311,10 @@
     body.desktop .section-header { padding: 18px 16px 8px; font-size: .76rem; }
 
     /* ── ANALYSIS 2-COLUMN LAYOUT ──
-       Mobile: display:contents makes the wrapper divs invisible to layout,
-       so children flow as a normal single column.
-       Desktop: wrapper becomes flex-row splitting chart left / stats right. */
-    .analysis-layout,
-    .analysis-col-left,
-    .analysis-col-right { display: contents; }
+       Mobile: block stacking — col-left (desc+chart) above col-right (stats).
+       Desktop: flex-row splits chart left / stats right. */
+    .analysis-layout { display: block; }
+    .analysis-col-left, .analysis-col-right { display: block; }
 
     body.desktop .analysis-layout {
       display: flex; flex-direction: row;
